@@ -529,6 +529,7 @@ export function AppLayout() {
           <h3 className="text-sm font-medium text-white/60">Members</h3>
         </div>
         <MemberList
+          key={activeChannel?.id ?? "none"}
           channelId={activeChannel?.id ?? null}
           myId={userId ?? ""}
           onDM={async (otherId, otherUser) => {
