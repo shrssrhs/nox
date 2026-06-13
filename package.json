@@ -2,25 +2,61 @@
   "name": "nox",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "next:dev": "next dev",
+    "next:build": "next build",
+    "electron:start": "wait-on http://localhost:3000 && electron .",
+    "dev": "concurrently -k \"npm run next:dev\" \"npm run electron:start\"",
+    "build": "npm run next:build && electron-builder",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.21",
+    "@livekit/components-styles": "^1.2.0",
+    "@supabase/auth-helpers-nextjs": "^0.15.0",
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.1",
+    "livekit-client": "^2.19.2",
+    "livekit-server-sdk": "^2.15.4",
     "next": "16.2.9",
+    "next-auth": "^5.0.0-beta.31",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-resizable-panels": "^4.11.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.3",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wait-on": "^9.0.10"
+  },
+  "build": {
+    "appId": "com.nox.messenger",
+    "productName": "Nox",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "out/**/*"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.social-networking",
+      "icon": "electron/assets/icon.icns"
+    },
+    "win": {
+      "target": "nsis"
+    }
   }
 }
