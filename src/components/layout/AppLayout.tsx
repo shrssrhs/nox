@@ -85,6 +85,7 @@ function Avatar({ name, url, size = 8 }: { name: string | null; url?: string | n
 function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
   const name = msg.profiles?.display_name ?? "Unknown";
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const badges = (msg.profiles as any)?.badges || [];
 
   const text = msg.content;
   
@@ -99,7 +100,28 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
       <Avatar name={name} url={msg.profiles?.avatar_url} size={8} />
       <div className={`flex max-w-[70%] flex-col gap-1 ${isOwn ? "items-end" : ""}`}>
         <div className="flex items-baseline gap-2">
-          {!isOwn && <span className="text-xs font-medium text-white/70">{name}</span>}
+          {!isOwn && (
+            <span className="text-xs font-medium text-white/70 flex items-center gap-1">
+              {name}
+              {/* Галочка в чате */}
+              {(["owner","investor","admin","mod","verified"] as const)
+                .filter(r => badges.includes(r))
+                .slice(0, 1)
+                .map(r => {
+                  const colors: Record<string, string> = {
+                    owner: "#F59E0B", investor: "#8B5CF6", admin: "#EF4444",
+                    mod: "#3B82F6", verified: "#10B981"
+                  };
+                  return (
+                    <svg key={r} width="13" height="13" viewBox="0 0 15 15" fill="none">
+                      <circle cx="7.5" cy="7.5" r="7.5" fill={colors[r]} />
+                      <polyline points="3.8,7.5 6.2,10.2 11.2,4.8" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  );
+                })
+              }
+            </span>
+          )}
           <span className="text-[11px] text-white/30">{time}</span>
         </div>
         
@@ -201,8 +223,23 @@ function MemberList({ channelId, myId, onDM }: MemberListProps) {
               }
               <span className="absolute -bottom-0.5 -right-0.5 text-[9px]">{emoji}</span>
             </div>
-            <span className="flex-1 truncate text-xs text-white/60 group-hover:text-white/80">
+            <span className="flex-1 truncate text-xs text-white/60 group-hover:text-white/80 flex items-center gap-1">
               {m.display_name ?? "Unknown"}
+              {(() => {
+                const badges = (m as any).badges || [];
+                const colors: Record<string, string> = {
+                  owner: "#F59E0B", investor: "#8B5CF6", admin: "#EF4444",
+                  mod: "#3B82F6", verified: "#10B981",
+                };
+                const top = ["owner","investor","admin","mod","verified"].find(r => badges.includes(r));
+                if (!top) return null;
+                return (
+                  <svg width="11" height="11" viewBox="0 0 15 15" fill="none">
+                    <circle cx="7.5" cy="7.5" r="7.5" fill={colors[top]} />
+                    <polyline points="3.8,7.5 6.2,10.2 11.2,4.8" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                );
+              })()}
               {isMe && <span className="ml-1 text-white/25">(you)</span>}
             </span>
             {!isMe && (

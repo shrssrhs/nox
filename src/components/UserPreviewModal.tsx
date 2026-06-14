@@ -2,17 +2,47 @@
 
 import { useRef, useEffect } from "react";
 
-// Словарь со стилями и текстом для каждой галочки
-const BADGE_CONFIG: Record<string, { label: string; icon: string; color: string; bg: string }> = {
-  owner: { label: "Owner", icon: "👑", color: "text-[#FFD700]", bg: "bg-[#FFD700]/10 border-[#FFD700]/20" },
-  admin: { label: "Admin", icon: "🛡️", color: "text-[#A30000]", bg: "bg-[#A30000]/10 border-[#A30000]/20" },
-  mod: { label: "Moderator", icon: "⚔️", color: "text-[#0088CC]", bg: "bg-[#0088CC]/10 border-[#0088CC]/20" },
-  verified: { label: "Verified", icon: "⭐", color: "text-[#00B359]", bg: "bg-[#00B359]/10 border-[#00B359]/20" },
-  bot: { label: "Bot", icon: "🤖", color: "text-[#8A2BE2]", bg: "bg-[#8A2BE2]/10 border-[#8A2BE2]/20" },
-  scam: { label: "Suspicious", icon: "⚠️", color: "text-[#FF4500]", bg: "bg-[#FF4500]/10 border-[#FF4500]/20" },
-  investor: { label: "Investor", icon: "💎", color: "text-[#00F5D4]", bg: "bg-[#00F5D4]/10 border-[#00F5D4]/20" },
+// ─── Цвета кружков по роли ────────────────────────────────────────────────────
+const BADGE_CONFIG: Record<string, { label: string; color: string }> = {
+  owner:    { label: "Owner",      color: "#F59E0B" }, // золотой
+  investor: { label: "Investor",   color: "#8B5CF6" }, // фиолетовый
+  admin:    { label: "Admin",      color: "#EF4444" }, // красный
+  mod:      { label: "Moderator",  color: "#3B82F6" }, // синий
+  verified: { label: "Verified",   color: "#10B981" }, // зелёный
+  bot:      { label: "Bot",        color: "#8A2BE2" }, // тёмно-фиолетовый
+  scam:     { label: "Suspicious", color: "#FF4500" }, // оранжево-красный
 };
 
+const ROLE_PRIORITY = ["owner", "investor", "admin", "mod", "verified", "bot", "scam"];
+
+// ─── Галочка в кружке ─────────────────────────────────────────────────────────
+function CheckBadge({ role, size = 15 }: { role: string; size?: number }) {
+  const conf = BADGE_CONFIG[role];
+  if (!conf) return null;
+  return (
+    <span title={conf.label} style={{ display: "inline-flex", flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox="0 0 15 15" fill="none">
+        <circle cx="7.5" cy="7.5" r="7.5" fill={conf.color} />
+        <polyline
+          points="3.8,7.5 6.2,10.2 11.2,4.8"
+          stroke="#fff"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
+// Показывает только первый (наивысший) бейдж
+function TopBadge({ badges, size }: { badges: string[]; size?: number }) {
+  const top = ROLE_PRIORITY.find((r) => badges.includes(r));
+  if (!top) return null;
+  return <CheckBadge role={top} size={size} />;
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface UserPreview {
   id: string;
   display_name: string | null;
@@ -22,7 +52,7 @@ interface UserPreview {
   bio?: string | null;
   email?: string | null;
   status: string | null;
-  badges?: string[]; // массив галочек пользователя
+  badges?: string[];
 }
 
 interface Props {
@@ -31,6 +61,7 @@ interface Props {
   onStartDM: () => void;
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
 export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const userBadges = user.badges || [];
@@ -41,8 +72,8 @@ export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
     return () => window.removeEventListener("keydown", handleEsc);
   }, [onClose]);
 
-  const initials = (user.display_name ?? "?").slice(0, 1).toUpperCase();
-  const emoji = user.status?.split(" ")[0] ?? "🟢";
+  const initials  = (user.display_name ?? "?").slice(0, 1).toUpperCase();
+  const emoji     = user.status?.split(" ")[0] ?? "🟢";
   const statusText = user.status?.split(" ").slice(1).join(" ") ?? "Online";
 
   return (
@@ -51,11 +82,10 @@ export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
       onClick={(e) => e.target === overlayRef.current && onClose()}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
     >
-      {/* Добавляем класс group на всю карточку, чтобы отслеживать hover */}
-      <div className="group w-full max-w-[400px] rounded-2xl border border-white/10 bg-[#111113] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 relative transition-all duration-300 hover:border-white/20">
-        
-        {/* Кнопка закрытия [X] */}
-        <button 
+      <div className="group w-full max-w-[380px] rounded-2xl border border-white/10 bg-[#111113] shadow-2xl overflow-hidden relative transition-all duration-200 hover:border-white/20">
+
+        {/* Закрыть */}
+        <button
           onClick={onClose}
           className="absolute top-3 right-3 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-black/40 text-white/40 hover:text-white/70 transition-colors"
         >
@@ -64,64 +94,64 @@ export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
           </svg>
         </button>
 
-        {/* 1. БАННЕР ПРОФИЛЯ */}
+        {/* Баннер */}
         <div className="h-28 w-full bg-zinc-800 relative overflow-hidden border-b border-white/5">
           {user.banner_url ? (
             <img src={user.banner_url} alt="" className="h-full w-full object-cover" />
-          ) : (
-            user.avatar_url && <img src={user.avatar_url} alt="" className="h-full w-full object-cover blur-md scale-110 opacity-50" />
-          )}
+          ) : user.avatar_url ? (
+            <img src={user.avatar_url} alt="" className="h-full w-full object-cover blur-md scale-110 opacity-40" />
+          ) : null}
         </div>
 
-        {/* 2. АВАТАРКА И БЕЙДЖИ */}
+        {/* Аватар + ряд галочек */}
         <div className="px-5 relative -mt-10 mb-3 flex items-end justify-between">
           <div className="relative">
             {user.avatar_url ? (
-              <img src={user.avatar_url} alt="" className="h-20 w-20 rounded-full object-cover border-[4px] border-[#111113] bg-[#111113]" />
+              <img src={user.avatar_url} alt="" className="h-20 w-20 rounded-full object-cover border-[4px] border-[#111113]" />
             ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-full border-[4px] border-[#111113] bg-zinc-800 text-xl font-bold text-white/60">{initials}</div>
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border-[4px] border-[#111113] bg-zinc-800 text-2xl font-bold text-white/60">
+                {initials}
+              </div>
             )}
-            <span className="absolute bottom-0 right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[#111113] bg-green-500" />
+            {/* Статус-точка */}
+            <span className="absolute bottom-0.5 right-1 h-3.5 w-3.5 rounded-full border-2 border-[#111113] bg-green-500" />
           </div>
 
-          {/* Строка компактных иконок галочек в углу аватара */}
-          <div className="flex gap-1 mb-1">
-            {userBadges.map((b) => {
-              const conf = BADGE_CONFIG[b];
-              if (!conf) return null;
-              return (
-                <span key={b} title={conf.label} className="cursor-default text-lg select-none">
-                  {conf.icon}
-                </span>
-              );
-            })}
+          {/* Все галочки юзера справа */}
+          <div className="flex items-center gap-1 mb-1">
+            {ROLE_PRIORITY.filter((r) => userBadges.includes(r)).map((r) => (
+              <CheckBadge key={r} role={r} size={18} />
+            ))}
           </div>
         </div>
 
-        {/* ОСНОВНОЙ КОНТЕНТ */}
+        {/* Контент */}
         <div className="px-5 pb-5 space-y-4">
-          
-          {/* Имена */}
+
+          {/* Имя + главная галочка рядом */}
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
               {user.display_name ?? "Unknown"}
+              <TopBadge badges={userBadges} size={16} />
             </h2>
             {user.username && <p className="text-xs text-white/40 mt-0.5">@{user.username}</p>}
-            {user.email && <p className="text-xs text-white/30 mt-0.5">{user.email}</p>}
+            {user.email    && <p className="text-xs text-white/25 mt-0.5">{user.email}</p>}
           </div>
 
-          {/* ── ДИНАМИЧЕСКИЙ СПИСОК ГАЛОЧЕК ПРИ НАВЕДЕНИИ ── */}
+          {/* Список ролей при наведении */}
           {userBadges.length > 0 && (
-            <div className="max-h-0 opacity-0 overflow-hidden transition-all duration-300 ease-in-out group-hover:max-h-[300px] group-hover:opacity-100 group-hover:mb-2">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-white/40 mb-2">Badges & Roles</span>
+            <div className="max-h-0 opacity-0 overflow-hidden transition-all duration-300 group-hover:max-h-60 group-hover:opacity-100">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/40 mb-2">Roles</p>
               <div className="grid grid-cols-2 gap-2">
-                {userBadges.map((b) => {
-                  const conf = BADGE_CONFIG[b];
-                  if (!conf) return null;
+                {ROLE_PRIORITY.filter((r) => userBadges.includes(r)).map((r) => {
+                  const conf = BADGE_CONFIG[r];
                   return (
-                    <div key={b} className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${conf.bg} text-xs font-medium ${conf.color}`}>
-                      <span className="text-sm">{conf.icon}</span>
-                      <span>{conf.label}</span>
+                    <div
+                      key={r}
+                      className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/5 px-3 py-2 text-xs font-medium text-white/70"
+                    >
+                      <CheckBadge role={r} size={13} />
+                      {conf.label}
                     </div>
                   );
                 })}
@@ -129,37 +159,29 @@ export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
             </div>
           )}
 
-          {/* БИО */}
+          {/* Био */}
           {user.bio && (
-            <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-3 text-sm text-white/80 leading-normal">
+            <p className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5 text-sm text-white/70 leading-relaxed">
               {user.bio}
-            </div>
+            </p>
           )}
 
-          {/* ИНФО-ПОЛЯ */}
-          <div className="space-y-3 pt-1">
-            <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1">Status</span>
-              <div className="w-full rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white/80 flex items-center gap-2">
-                <span>{emoji}</span>
-                <span>{statusText}</span>
-              </div>
+          {/* Статус */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1">Status</p>
+            <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white/70">
+              <span>{emoji}</span>
+              <span>{statusText}</span>
             </div>
           </div>
 
-          {/* КНОПКА ОТПРАВКИ СООБЩЕНИЯ */}
-          <div className="pt-2">
-            <button
-              onClick={() => {
-                onStartDM();
-                onClose();
-              }}
-              className="w-full rounded-xl bg-white text-black font-medium py-2.5 text-sm transition-opacity hover:opacity-90 shadow-sm"
-            >
-              Send Message
-            </button>
-          </div>
-
+          {/* Кнопка DM */}
+          <button
+            onClick={() => { onStartDM(); onClose(); }}
+            className="w-full rounded-xl bg-white py-2.5 text-sm font-medium text-black transition-opacity hover:opacity-90"
+          >
+            Send Message
+          </button>
         </div>
       </div>
     </div>
