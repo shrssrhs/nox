@@ -9,11 +9,10 @@ export default function LoginPage() {
 
   async function signIn(provider: "github" | "google") {
     setLoading(provider);
+    const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin}/auth/callback`;
     await supabase.auth.signInWithOAuth({
       provider,
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { redirectTo },
     });
   }
 

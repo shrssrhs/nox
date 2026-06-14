@@ -224,26 +224,42 @@ export function AppLayout() {
   const [view, setView] = useState<"channel" | "dm">("channel");
 
   useEffect(() => {
+    // Ждем, пока загрузится реальный userId
+    if (!userId) return;
+  
     async function loadChannels() {
+      // 1. Берем только те каналы, куда вступил ТЕКУЩИЙ пользователь
       const { data: members } = await supabase
         .from("channel_members")
-        .select("channel_id");
-
-      if (!members || members.length === 0) return;
-
+        .select("channel_id")
+        .eq("user_id", userId);
+  
+      if (!members || members.length === 0) {
+        // Если юзер реально нигде не состоит — открываем модалку онбординга
+        setChannels([]);
+        setChannelModalOpen(true);
+        return;
+      }
+  
       const ids = members.map((m: any) => m.channel_id);
-
+  
+      // 2. Достаем инфу по этим каналам
       const { data: chans } = await supabase
         .from("channels")
         .select("id, name, description")
-        .in("id", ids);
-
+        .in("id", ids)
+        .order("name");
+  
       const list = (chans ?? []) as Channel[];
       setChannels(list);
-      if (list.length > 0) setActiveChannel(list[0]);
+      
+      if (list.length > 0) {
+        setActiveChannel(list[0]);
+      }
     }
+  
     loadChannels();
-  }, []);
+  }, [userId]); // <-- Добавили userId в зависимости, чтобы код перезапускался при входе пользователя
 
   // Messages
   const { messages, sendMessage, loading, bottomRef } = useMessages(
