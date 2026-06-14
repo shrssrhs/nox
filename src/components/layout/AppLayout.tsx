@@ -238,7 +238,7 @@ export function AppLayout() {
   const [userId, setUserId]       = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [channelModalOpen, setChannelModalOpen] = useState(false);
-
+  
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return;
@@ -315,31 +315,61 @@ export function AppLayout() {
     activeChannel?.id ?? ""
   );
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      // Если канал не выбран или сейчас уже идет загрузка — игнорим
+      if (!activeChannel?.id || uploadingFile) return;
+  
+      const items = e.clipboardData?.items;
+      if (!items) return;
+  
+      for (let i = 0; i < items.length; i++) {
+        // Ищем файлы (картинки, файлы и т.д.) среди объектов буфера
+        if (items[i].kind === 'file') {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault(); // отменяем стандартное поведение (например, вставку текста [object File])
+            handleFileUpload(file); // передаем файл напрямую в загрузчик
+            break; // берем только первый файл, если их несколько
+          }
+        }
+      }
+    };
+  
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [activeChannel, uploadingFile]); // хук обновится при смене канала
+
+  const handleFileUpload = async (eOrFile: React.ChangeEvent<HTMLInputElement> | File) => {
+    let file: File | null = null;
+  
+    if (eOrFile instanceof File) {
+      file = eOrFile;
+    } else {
+      file = eOrFile.target.files?.[0] || null;
+    }
+  
     if (!file || !activeChannel?.id) return;
   
     try {
       setUploadingFile(true);
   
-      // Генерируем уникальное имя файла, чтобы они не перезаписывались
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+      const fileExt = file.name.split('.').pop() || 'png';
+      // Если имя файла дефолтное из буфера (image.png), делаем его уникальным
+      const baseName = file.name.startsWith('image') ? 'clipboard' : file.name.split('-')[0];
+      const fileName = `${baseName}-${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
       const filePath = `${activeChannel.id}/${fileName}`;
   
-      // Загружаем файл в созданный бакет attachments
       const { data, error } = await supabase.storage
         .from("attachments")
         .upload(filePath, file);
   
       if (error) throw error;
   
-      // Получаем публичную ссылку на файл
       const { data: { publicUrl } } = supabase.storage
         .from("attachments")
         .getPublicUrl(filePath);
   
-      // Автоматически отправляем эту ссылку как сообщение в чат!
       await sendMessage(publicUrl);
   
     } catch (error) {
@@ -347,7 +377,7 @@ export function AppLayout() {
       alert("Failed to upload file");
     } finally {
       setUploadingFile(false);
-      if (fileInputRef.current) fileInputRef.current.value = ""; // сбрасываем инпут
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
