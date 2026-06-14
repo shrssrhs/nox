@@ -573,7 +573,7 @@ export function AppLayout() {
         />
       </aside>
 
-      {/* Превью профиля */}
+      {/* Убедись, что этот блок стоит в самом низу AppLayout */}
       {previewUser && (
         <UserPreviewModal
           user={previewUser}
@@ -588,7 +588,7 @@ export function AppLayout() {
           }}
         />
       )}
-    </div> // это самый последний закрывающий тег AppLayout
+    </div>
   );
 }
 
