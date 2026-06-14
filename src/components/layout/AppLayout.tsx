@@ -124,7 +124,7 @@ function MemberList({ channelId, myId, onDM }: MemberListProps) {
     if (!channelId) { setMembers([]); return; }
     supabaseClient
       .from("channel_members")
-      .select("profiles(id, display_name, avatar_url, status)")
+      .select("profiles(id, display_name, avatar_url, status, username, bio, banner_url, email)")
       .eq("channel_id", channelId)
       .then(({ data }) => {
         const list = (data ?? []).map((r: any) => r.profiles).filter(Boolean);
