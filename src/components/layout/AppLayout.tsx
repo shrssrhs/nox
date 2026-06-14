@@ -9,6 +9,7 @@ import { ProfileModal } from "@/components/ProfileModal";
 import { DMView } from "@/components/DMView";
 import { useConversations, getOrCreateConversation } from "@/hooks/useDMs";
 import type { Conversation } from "@/hooks/useDMs";
+import { ChannelModal } from "@/components/ChannelModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Channel {
@@ -142,7 +143,8 @@ function MemberList({ channelId, myId, onDM }: MemberListProps) {
         return (
           <div
             key={m.id}
-            className="group flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-white/5"
+            onClick={() => !isMe && onDM(m.id, m)}
+            className={`group flex items-center gap-2.5 rounded-lg px-2 py-1.5 ${!isMe ? "cursor-pointer hover:bg-white/5" : ""}`}
           >
             <div className="relative flex-shrink-0">
               {m.avatar_url
@@ -158,15 +160,9 @@ function MemberList({ channelId, myId, onDM }: MemberListProps) {
               {isMe && <span className="ml-1 text-white/25">(you)</span>}
             </span>
             {!isMe && (
-              <button
-                onClick={() => onDM(m.id, m)}
-                className="hidden text-white/20 hover:text-white/60 group-hover:block transition-colors"
-                title="Send DM"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-              </button>
+              <svg className="opacity-0 group-hover:opacity-40" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
             )}
           </div>
         );
@@ -192,6 +188,7 @@ export function AppLayout() {
   const [profile, setProfile]     = useState<Profile | null>(null);
   const [userId, setUserId]       = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [channelModalOpen, setChannelModalOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -290,10 +287,30 @@ export function AppLayout() {
       >
         <div className="border-b border-white/10 p-5">
           <h1 className="text-xl font-semibold tracking-tight">Nox</h1>
-          <button className="mt-4 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10">
+          <button
+            onClick={() => setChannelModalOpen(true)}
+            className="mt-4 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10"
+          >
             + New Chat
           </button>
         </div>
+
+        {channelModalOpen && userId && (
+          <ChannelModal
+            userId={userId}
+            onClose={() => setChannelModalOpen(false)}
+            onJoin={(ch) => {
+              setChannels((prev) => {
+                const exists = prev.find((c) => c.id === ch.id);
+                if (exists) return prev;
+                return [...prev, ch];
+              });
+              setActiveChannel(ch);
+              setActiveConv(null);
+              setView("channel");
+            }}
+          />
+        )}
 
         <nav className="flex-1 overflow-y-auto p-3">
           {/* Channels */}
