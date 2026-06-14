@@ -10,6 +10,7 @@ import { DMView } from "@/components/DMView";
 import { useConversations, getOrCreateConversation } from "@/hooks/useDMs";
 import type { Conversation } from "@/hooks/useDMs";
 import { ChannelModal } from "@/components/ChannelModal";
+import { UserPreviewModal } from "@/components/UserPreviewModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Channel {
@@ -185,6 +186,7 @@ export function AppLayout() {
   const handleRightResize = useCallback((d: number) => setRightWidth((w) => clamp(w - d, MIN_SIDE, MAX_SIDE)), []);
 
   // Auth / profile
+  const [previewUser, setPreviewUser] = useState<any | null>(null);
   const [profile, setProfile]     = useState<Profile | null>(null);
   const [userId, setUserId]       = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -565,16 +567,28 @@ export function AppLayout() {
           key={activeChannel?.id ?? "none"}
           channelId={activeChannel?.id ?? null}
           myId={userId ?? ""}
-          onDM={async (otherId, otherUser) => {
+          onDM={(otherId, otherUser) => {
+            setPreviewUser(otherUser);
+          }}
+        />
+      </aside>
+
+      {/* Превью профиля */}
+      {previewUser && (
+        <UserPreviewModal
+          user={previewUser}
+          onClose={() => setPreviewUser(null)}
+          onStartDM={async () => {
             if (!userId) return;
-            const convId = await getOrCreateConversation(userId, otherId);
+            const convId = await getOrCreateConversation(userId, previewUser.id);
             if (!convId) return;
-            setActiveConv({ id: convId, other_user: otherUser });
+            setActiveConv({ id: convId, other_user: previewUser });
             setActiveChannel(null);
             setView("dm");
           }}
         />
-      </aside>
-    </div>
+      )}
+    </div> // это самый последний закрывающий тег AppLayout
   );
 }
+
