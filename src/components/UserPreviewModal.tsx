@@ -140,7 +140,7 @@ export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
               }}
               className="w-full rounded-xl bg-white text-black font-medium py-2.5 text-sm transition-opacity hover:opacity-90 shadow-sm"
             >
-              Save changes
+              Send Message
             </button>
           </div>
 

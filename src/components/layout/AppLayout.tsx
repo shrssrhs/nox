@@ -86,6 +86,14 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
   const name = msg.profiles?.display_name ?? "Unknown";
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+  const text = msg.content;
+  
+  // Простые регулярки для проверки расширений медиафайлов
+  const isImage = /\.(jpeg|jpg|gif|png|webp)($|\?)/i.test(text);
+  const isVideo = /\.(mp4|webm|ogg|mov)($|\?)/i.test(text);
+  // Проверка, является ли сообщение вообще ссылкой из нашего хранилища attachments
+  const isStorageFile = text.startsWith("http") && text.includes("/storage/v1/object/public/");
+
   return (
     <div className={`flex gap-3 ${isOwn ? "flex-row-reverse" : ""}`}>
       <Avatar name={name} url={msg.profiles?.avatar_url} size={8} />
@@ -94,14 +102,51 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
           {!isOwn && <span className="text-xs font-medium text-white/70">{name}</span>}
           <span className="text-[11px] text-white/30">{time}</span>
         </div>
+        
         <div
-          className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-            isOwn
-              ? "rounded-tr-sm bg-white/10 text-white"
-              : "rounded-tl-sm bg-white/5 text-white/90"
+          className={`rounded-2xl text-sm leading-relaxed overflow-hidden ${
+            isImage || isVideo 
+              ? "bg-transparent p-0" // картинкам и видео не нужна лишняя рамка
+              : isOwn
+                ? "rounded-tr-sm bg-white/10 px-4 py-2.5 text-white"
+                : "rounded-tl-sm bg-white/5 px-4 py-2.5 text-white/90"
           }`}
         >
-          {msg.content}
+          {isImage ? (
+            <img 
+              src={text} 
+              alt="Shared media" 
+              className="max-w-xs md:max-w-md max-h-72 rounded-xl object-contain border border-white/10 bg-black/20" 
+              loading="lazy"
+            />
+          ) : isVideo ? (
+            <video 
+              src={text} 
+              controls 
+              className="max-w-xs md:max-w-md max-h-72 rounded-xl border border-white/10 bg-black/20"
+            />
+          ) : isStorageFile ? (
+            // Для остальных файлов (zip, pdf, docx) делаем аккуратную карточку скачивания
+            <a 
+              href={text} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-3 rounded-xl transition-colors text-white"
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/60">
+                📎
+              </div>
+              <div className="min-w-0 text-left">
+                <p className="text-xs font-medium truncate max-w-[180px] text-white/80">
+                  {text.split('/').pop()?.split('-').slice(1).join('-') || "Shared File"}
+                </p>
+                <p className="text-[10px] text-white/30">Click to download</p>
+              </div>
+            </a>
+          ) : (
+            // Обычное текстовое сообщение
+            text
+          )}
         </div>
       </div>
     </div>
@@ -177,6 +222,8 @@ export function AppLayout() {
   const supabase = createClient();
 
   // Layout
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [leftWidth, setLeftWidth]   = useState(260);
   const [rightWidth, setRightWidth] = useState(260);
   const MIN_SIDE = 180;
@@ -267,6 +314,42 @@ export function AppLayout() {
   const { messages, sendMessage, loading, bottomRef } = useMessages(
     activeChannel?.id ?? ""
   );
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeChannel?.id) return;
+  
+    try {
+      setUploadingFile(true);
+  
+      // Генерируем уникальное имя файла, чтобы они не перезаписывались
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+      const filePath = `${activeChannel.id}/${fileName}`;
+  
+      // Загружаем файл в созданный бакет attachments
+      const { data, error } = await supabase.storage
+        .from("attachments")
+        .upload(filePath, file);
+  
+      if (error) throw error;
+  
+      // Получаем публичную ссылку на файл
+      const { data: { publicUrl } } = supabase.storage
+        .from("attachments")
+        .getPublicUrl(filePath);
+  
+      // Автоматически отправляем эту ссылку как сообщение в чат!
+      await sendMessage(publicUrl);
+  
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      alert("Failed to upload file");
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = ""; // сбрасываем инпут
+    }
+  };
 
   // Input
   const [draft, setDraft] = useState("");
@@ -515,21 +598,48 @@ export function AppLayout() {
         </div>
 
         {/* Input */}
+        {/* Поле ввода сообщений с кнопкой скрепки */}
         <div className="border-t border-white/10 p-4">
           <div className="flex items-end gap-3">
+                
+            {/* Скрытый инпут для выбора файлов */}
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+              className="hidden" 
+              accept="image/*,video/*,application/*"
+            />
+        
+            {/* Кнопка скрепки */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingFile || !activeChannel}
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-20"
+            >
+              {uploadingFile ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                </svg>
+              )}
+            </button>
+            
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={activeChannel ? `Message #${activeChannel.name}…` : "Select a channel…"}
-              disabled={!activeChannel}
+              disabled={!activeChannel || uploadingFile}
               rows={1}
               className="flex-1 resize-none overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-white/20 disabled:opacity-30 [&::-webkit-scrollbar]:hidden [&::-webkit-resizer]:hidden"
               style={{ scrollbarWidth: "none" }}
             />
+            
             <button
               onClick={handleSend}
-              disabled={!draft.trim() || !activeChannel}
+              disabled={!draft.trim() || !activeChannel || uploadingFile}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-20"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -539,7 +649,7 @@ export function AppLayout() {
             </button>
           </div>
           <p className="mt-2 pl-1 text-[11px] text-white/20">
-            Enter to send · Shift+Enter for new line
+            Enter to send · Shift+Enter for new line · Click 📎 to share media
           </p>
         </div>
         </>)}
