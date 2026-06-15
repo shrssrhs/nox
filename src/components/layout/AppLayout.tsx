@@ -537,6 +537,23 @@ export function AppLayout() {
           })}
         </nav>
 
+        {/* ── BUTTON SUPPORT PROJECT ──────────────────────────────────────── */}
+        <div className="px-3 mb-2">
+          <a
+            href="https://donatello.to/onir_nox" // Тут измени на свой точный ник в Donatello, если нужно
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full py-2 px-3 
+                       font-mono text-[11px] text-white/30 rounded-lg 
+                       border border-dashed border-white/10 bg-white/[0.01]
+                       hover:text-white/80 hover:border-white/20 hover:bg-white/[0.03] 
+                       transition-all duration-200 select-none"
+          >
+            <span>[ Support Project ]</span>
+          </a>
+        </div>
+
+        {/* User Profile Block */}
         <div className="border-t border-white/10 p-4">
           <button
             onClick={() => setProfileOpen(true)}
@@ -665,11 +682,9 @@ export function AppLayout() {
         </div>
 
         {/* Input */}
-        {/* Поле ввода сообщений с кнопкой скрепки */}
         <div className="border-t border-white/10 p-4">
           <div className="flex items-end gap-3">
                 
-            {/* Скрытый инпут для выбора файлов */}
             <input 
               type="file" 
               ref={fileInputRef} 
@@ -678,7 +693,6 @@ export function AppLayout() {
               accept="image/*,video/*,application/*"
             />
         
-            {/* Кнопка скрепки */}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingFile || !activeChannel}
@@ -750,7 +764,6 @@ export function AppLayout() {
         />
       </aside>
 
-      {/* Убедись, что этот блок стоит в самом низу AppLayout */}
       {previewUser && (
         <UserPreviewModal
           user={previewUser}
@@ -768,4 +781,3 @@ export function AppLayout() {
     </div>
   );
 }
-
