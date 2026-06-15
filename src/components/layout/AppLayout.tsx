@@ -86,24 +86,62 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
   const name = msg.profiles?.display_name ?? "Unknown";
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const badges = (msg.profiles as any)?.badges || [];
-
   const text = msg.content;
-  
-  // Простые регулярки для проверки расширений медиафайлов
+
+  // Стейты для контекстного меню
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+
+  // Стейты для редактирования
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(text);
+
   const isImage = /\.(jpeg|jpg|gif|png|webp)($|\?)/i.test(text);
   const isVideo = /\.(mp4|webm|ogg|mov)($|\?)/i.test(text);
-  // Проверка, является ли сообщение вообще ссылкой из нашего хранилища attachments
   const isStorageFile = text.startsWith("http") && text.includes("/storage/v1/object/public/");
 
+  // Открытие кастомного меню по ПКМ
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault(); // Глушим дефолтное меню браузера
+    setMenuPosition({ x: e.clientX, y: e.clientY });
+    setMenuVisible(true);
+  };
+
+  // Закрытие меню при клике в любое другое место
+  useEffect(() => {
+    const closeMenu = () => setMenuVisible(false);
+    if (menuVisible) {
+      window.addEventListener("click", closeMenu);
+    }
+    return () => window.removeEventListener("click", closeMenu);
+  }, [menuVisible]);
+
+  // Функции-заглушки для действий
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const handleDelete = () => {
+    console.log("Удалить сообщение из Supabase:", msg.id);
+  };
+
+  const handleSaveEdit = () => {
+    console.log("Сохранить изменения в Supabase:", editValue);
+    setIsEditing(false);
+  };
+
   return (
-    <div className={`flex gap-3 ${isOwn ? "flex-row-reverse" : ""}`}>
+    <div 
+      onContextMenu={handleContextMenu}
+      className={`relative flex gap-3 select-none ${isOwn ? "flex-row-reverse" : ""}`}
+    >
       <Avatar name={name} url={msg.profiles?.avatar_url} size={8} />
+      
       <div className={`flex max-w-[70%] flex-col gap-1 ${isOwn ? "items-end" : ""}`}>
         <div className="flex items-baseline gap-2">
           {!isOwn && (
             <span className="text-xs font-medium text-white/70 flex items-center gap-1">
               {name}
-              {/* Галочка в чате */}
               {(["owner","investor","admin","mod","verified"] as const)
                 .filter(r => badges.includes(r))
                 .slice(0, 1)
@@ -128,36 +166,32 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
         <div
           className={`rounded-2xl text-sm leading-relaxed overflow-hidden ${
             isImage || isVideo 
-              ? "bg-transparent p-0" // картинкам и видео не нужна лишняя рамка
+              ? "bg-transparent p-0" 
               : isOwn
                 ? "rounded-tr-sm bg-white/10 px-4 py-2.5 text-white"
                 : "rounded-tl-sm bg-white/5 px-4 py-2.5 text-white/90"
           }`}
         >
-          {isImage ? (
-            <img 
-              src={text} 
-              alt="Shared media" 
-              className="max-w-xs md:max-w-md max-h-72 rounded-xl object-contain border border-white/10 bg-black/20" 
-              loading="lazy"
-            />
-          ) : isVideo ? (
-            <video 
-              src={text} 
-              controls 
-              className="max-w-xs md:max-w-md max-h-72 rounded-xl border border-white/10 bg-black/20"
-            />
-          ) : isStorageFile ? (
-            // Для остальных файлов (zip, pdf, docx) делаем аккуратную карточку скачивания
-            <a 
-              href={text} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-3 rounded-xl transition-colors text-white"
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/60">
-                📎
+          {isEditing ? (
+            <div className="flex flex-col gap-2 min-w-[220px]">
+              <textarea
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm text-white outline-none focus:border-white/20 resize-none font-sans"
+                rows={2}
+              />
+              <div className="flex justify-end gap-1.5 text-xs font-mono">
+                <button onClick={() => setIsEditing(false)} className="text-white/40 hover:text-white px-2 py-1">[cancel]</button>
+                <button onClick={handleSaveEdit} className="text-emerald-400 hover:text-emerald-300 px-2 py-1">[save]</button>
               </div>
+            </div>
+          ) : isImage ? (
+            <img src={text} alt="Shared media" className="max-w-xs md:max-w-md max-h-72 rounded-xl object-contain border border-white/10 bg-black/20" loading="lazy" />
+          ) : isVideo ? (
+            <video src={text} controls className="max-w-xs md:max-w-md max-h-72 rounded-xl border border-white/10 bg-black/20"/>
+          ) : isStorageFile ? (
+            <a href={text} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-3 rounded-xl transition-colors text-white">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/60">📎</div>
               <div className="min-w-0 text-left">
                 <p className="text-xs font-medium truncate max-w-[180px] text-white/80">
                   {text.split('/').pop()?.split('-').slice(1).join('-') || "Shared File"}
@@ -166,11 +200,57 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
               </div>
             </a>
           ) : (
-            // Обычное текстовое сообщение
             text
           )}
         </div>
       </div>
+
+      {/* ─── КАСТОМНОЕ КОНТЕКСТНОЕ МЕНЮ (ПКМ) ─── */}
+      {menuVisible && (
+        <div
+          className="fixed z-50 flex flex-col min-w-[120px] bg-[#0D0D0F] border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
+          style={{ top: menuPosition.y, left: menuPosition.x }}
+          onClick={(e) => e.stopPropagation()} // Чтобы клик внутри меню не закрывал его раньше времени
+        >
+          <button className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors">
+            [reply]
+          </button>
+          
+          {isOwn && !isImage && !isVideo && !isStorageFile && (
+            <button 
+              onClick={() => { setIsEditing(true); setMenuVisible(false); }}
+              className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              [edit]
+            </button>
+          )}
+          
+          <button className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors">
+            [pin]
+          </button>
+          
+          <button 
+            onClick={() => { handleCopy(); setMenuVisible(false); }}
+            className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors"
+          >
+            [copy]
+          </button>
+          
+          {isOwn && (
+            <div className="my-1 border-t border-white/5" /> // Тонкий разделитель перед удалением
+          )}
+
+          {isOwn && (
+            <button 
+              onClick={() => { handleDelete(); setMenuVisible(false); }}
+              className="w-full text-left font-mono text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              [delete]
+            </button>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
