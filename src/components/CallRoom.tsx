@@ -7,6 +7,7 @@ import {
   LiveKitRoom,
   RoomAudioRenderer,
   ControlBar,
+  LayoutContextProvider,
   useParticipants,
   useLocalParticipant,
   useTracks,
