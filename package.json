@@ -8,7 +8,8 @@
     "next:build": "next build",
     "electron:start": "wait-on http://localhost:3000 && electron ./electron/main.js",
     "dev": "concurrently -k \"npm run next:dev\" \"npm run electron:start\"",
-    "build": "npm run next:build && electron-builder --config electron-builder.yml",
+    "build": "npm run next:build",
+    "build:electron": "npm run next:build && electron-builder",
     "start": "next start",
     "lint": "eslint"
   },
