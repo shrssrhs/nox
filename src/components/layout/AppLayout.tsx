@@ -523,6 +523,7 @@ export function AppLayout() {
 
   // Call
   const [callActive, setCallActive] = useState(false);
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
   const callRoomName = activeChannel ? `nox-${activeChannel.id}` : "";
 
   return (
@@ -698,7 +699,14 @@ export function AppLayout() {
 
           {activeChannel && (
             <button
-              onClick={() => setCallActive((v) => !v)}
+              onClick={() => {
+                if (callActive) {
+                  setCallActive(false);
+                  setIsCallMinimized(false);
+                } else {
+                  setCallActive(true);
+                }
+              }}
               className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition-colors ${
                 callActive
                   ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
@@ -731,7 +739,12 @@ export function AppLayout() {
             <CallRoom
               channelId={activeChannel.id}
               roomName={callRoomName}
-              onLeave={() => setCallActive(false)}
+              isMinimized={isCallMinimized}
+              onMinimizeToggle={() => setIsCallMinimized((v) => !v)}
+              onLeave={() => {
+                setCallActive(false);
+                setIsCallMinimized(false);
+              }}
             />
           </div>
         )}
