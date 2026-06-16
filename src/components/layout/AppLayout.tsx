@@ -10,6 +10,7 @@ import { DMView } from "@/components/DMView";
 import { useConversations, getOrCreateConversation } from "@/hooks/useDMs";
 import type { Conversation } from "@/hooks/useDMs";
 import { ChannelModal } from "@/components/ChannelModal";
+import { DMProfilePanel } from "@/components/DMProfilePanel";
 import { UserPreviewModal } from "@/components/UserPreviewModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -837,25 +838,39 @@ export function AppLayout() {
         )}
       </main>
 
-      <ResizeHandle onResize={handleRightResize} />
-
       {/* ── RIGHT PANEL ──────────────────────────────────────────────────── */}
+      {((view === "channel" && activeChannel) || (view === "dm" && activeConv)) && (
+      <>
+      <ResizeHandle onResize={handleRightResize} />
       <aside
         className="flex h-full flex-col border-l border-white/10 bg-[#0D0D0F]"
         style={{ width: rightWidth, minWidth: MIN_SIDE, flexShrink: 0 }}
       >
-        <div className="border-b border-white/10 px-5 py-4">
-          <h3 className="text-sm font-medium text-white/60">Members</h3>
-        </div>
-        <MemberList
-          key={activeChannel?.id ?? "none"}
-          channelId={activeChannel?.id ?? null}
-          myId={userId ?? ""}
-          onDM={(otherId, otherUser) => {
-            setPreviewUser(otherUser);
-          }}
-        />
+        {view === "dm" && activeConv ? (
+          <>
+            <div className="border-b border-white/10 px-5 py-4">
+              <h3 className="text-sm font-medium text-white/60">Profile</h3>
+            </div>
+            <DMProfilePanel userId={activeConv.other_user.id} />
+          </>
+        ) : (
+          <>
+            <div className="border-b border-white/10 px-5 py-4">
+              <h3 className="text-sm font-medium text-white/60">Members</h3>
+            </div>
+            <MemberList
+              key={activeChannel?.id ?? "none"}
+              channelId={activeChannel?.id ?? null}
+              myId={userId ?? ""}
+              onDM={(otherId, otherUser) => {
+                setPreviewUser(otherUser);
+              }}
+            />
+          </>
+        )}
       </aside>
+      </>
+      )}
 
       {previewUser && (
         <UserPreviewModal

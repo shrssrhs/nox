@@ -26,6 +26,7 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
   const [creating, setCreating] = useState(false);
   const [newName,  setNewName]  = useState("");
   const [newDesc,  setNewDesc]  = useState("");
+  const [newMode,  setNewMode]  = useState<"open" | "owner_only">("open");
   const [tab,      setTab]      = useState<"browse" | "create">("browse");
   const inputRef   = useRef<HTMLInputElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -82,6 +83,7 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
         name: newName.trim().toLowerCase().replace(/\s+/g, "-"),
         description: newDesc.trim() || null,
         created_by: userId,
+        mode: newMode,
       })
       .select("id, name, description")
       .single();
@@ -185,40 +187,93 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
 
         {/* CREATE */}
         {tab === "create" && (
-          <div className="space-y-4 p-5">
-            <div>
-              <label className="mb-1.5 block text-xs text-white/40">Channel name</label>
-              <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-4">
-                <span className="text-sm text-white/30">#</span>
+          <div className="p-6">
+            <h3 className="text-lg font-medium text-white">Create channel node</h3>
+            <p className="mt-1 mb-5 text-xs text-white/40">
+              Initialize a synchronous streaming point inside the ecosystem.
+            </p>
+
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-white/30">
+                  Node Name
+                </label>
                 <input
+                  type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, "-"))}
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                  className="flex-1 bg-transparent py-2.5 pl-1 text-sm text-white outline-none placeholder:text-white/20"
-                  placeholder="channel-name"
+                  placeholder="e.g. design-core"
                   autoFocus
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-white/20"
                 />
               </div>
-              <p className="mt-1 text-xs text-white/20">Lowercase, numbers and dashes only</p>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-white/30">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  placeholder="System notes or metadata guidelines"
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-white/20"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-white/30">
+                  Broadcast System Mode
+                </label>
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewMode("open")}
+                    className={`rounded-xl border p-3 text-left transition-all ${
+                      newMode === "open"
+                        ? "border-white/20 bg-white/5 text-white"
+                        : "border-white/5 bg-transparent text-white/40 hover:border-white/10"
+                    }`}
+                  >
+                    <p className="text-xs font-semibold">Open Channel</p>
+                    <p className="mt-0.5 text-[10px] text-white/30">
+                      Every synchronized node user can type and share files.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewMode("owner_only")}
+                    className={`rounded-xl border p-3 text-left transition-all ${
+                      newMode === "owner_only"
+                        ? "border-white/20 bg-white/5 text-white"
+                        : "border-white/5 bg-transparent text-white/40 hover:border-white/10"
+                    }`}
+                  >
+                    <p className="text-xs font-semibold">Owner Only</p>
+                    <p className="mt-0.5 text-[10px] text-white/30">
+                      Read-only system feed for members. Only you can broadcast.
+                    </p>
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="mb-1.5 block text-xs text-white/40">Description <span className="text-white/20">(optional)</span></label>
-              <input
-                value={newDesc}
-                onChange={(e) => setNewDesc(e.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-white/20 placeholder:text-white/20"
-                placeholder="What's this channel about?"
-              />
+            <div className="mt-6 flex justify-end gap-2.5 border-t border-white/5 pt-4">
+              <button
+                onClick={onClose}
+                className="rounded-xl px-4 py-2 text-xs font-medium text-white/40 transition-colors hover:text-white"
+              >
+                Abort
+              </button>
+              <button
+                onClick={handleCreate}
+                disabled={creating || !newName.trim()}
+                className="rounded-xl bg-white px-4 py-2 text-xs font-medium text-black transition-all hover:bg-white/90 disabled:opacity-30"
+              >
+                {creating ? "Deploying…" : "Deploy Link"}
+              </button>
             </div>
-
-            <button
-              onClick={handleCreate}
-              disabled={creating || !newName.trim()}
-              className="w-full rounded-xl bg-white/10 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/15 disabled:opacity-40"
-            >
-              {creating ? "Creating…" : "Create channel"}
-            </button>
           </div>
         )}
 
