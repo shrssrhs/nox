@@ -12,9 +12,9 @@ import {
   useTracks,
   AudioTrack,
 } from "@livekit/components-react";
-import { Track, Participant, RemoteParticipant } from "livekit-client";
-import { useEffect, useState, useRef } from "react";
-import { Mic, MicOff, MonitorUp, PhoneOff } from "lucide-react";
+import { Track, Participant } from "livekit-client";
+import { useEffect, useState } from "react";
+import { MicOff } from "lucide-react";
 
 interface CallRoomProps {
   channelId: string;
@@ -24,39 +24,61 @@ interface CallRoomProps {
   onLeave: () => void;
 }
 
+// ─── Parse participant metadata ───────────────────────────────────────────────
+function useParticipantMeta(participant: Participant) {
+  const raw = participant.metadata;
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 // ─── Participant avatar circle ────────────────────────────────────────────────
 function ParticipantTile({ participant }: { participant: Participant }) {
-  const isMuted = participant.isMicrophoneEnabled === false;
+  const isMuted = !participant.isMicrophoneEnabled;
   const isSpeaking = participant.isSpeaking;
+  const meta = useParticipantMeta(participant);
 
-  // Derive initials from identity
-  const identity = participant.identity ?? "?";
-  const initials = identity
+  const displayName: string = meta.display_name ?? participant.name ?? participant.identity ?? "?";
+  const avatarUrl: string | null = meta.avatar_url ?? null;
+
+  // Initials fallback
+  const initials = displayName
     .split(/[\s@_\-.]/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join("");
+    .map((w: string) => w[0].toUpperCase())
+    .join("") || "?";
 
   // Consistent colour from identity hash
   const colours = [
     "#5865F2", "#57F287", "#FEE75C", "#EB459E",
     "#ED4245", "#3BA55D", "#FAA61A", "#00B0F4",
   ];
+  const identity = participant.identity ?? "";
   const hue = colours[
     [...identity].reduce((acc, c) => acc + c.charCodeAt(0), 0) % colours.length
   ];
 
   return (
-    <div className="flex flex-col items-center gap-2 select-none">
-      {/* Avatar ring – glows green when speaking */}
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 8,
+        userSelect: "none",
+      }}
+    >
+      {/* Speaking ring */}
       <div
         style={{
           padding: 3,
           borderRadius: "50%",
           background: isSpeaking ? "#23a55a" : "transparent",
-          transition: "background 0.15s ease",
           boxShadow: isSpeaking ? "0 0 0 3px rgba(35,165,90,0.35)" : "none",
+          transition: "background 0.15s ease, box-shadow 0.15s ease",
         }}
       >
         <div
@@ -65,18 +87,27 @@ function ParticipantTile({ participant }: { participant: Participant }) {
             height: 80,
             borderRadius: "50%",
             background: hue,
+            overflow: "hidden",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             fontSize: 28,
             fontWeight: 700,
             color: "#fff",
-            letterSpacing: 1,
             position: "relative",
-            userSelect: "none",
+            flexShrink: 0,
           }}
         >
-          {initials || "?"}
+          {/* Real avatar or initials */}
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            initials
+          )}
 
           {/* Muted badge */}
           {isMuted && (
@@ -101,13 +132,13 @@ function ParticipantTile({ participant }: { participant: Participant }) {
         </div>
       </div>
 
-      {/* Name label */}
+      {/* Name */}
       <span
         style={{
           fontSize: 13,
           fontWeight: 500,
           color: isSpeaking ? "#23a55a" : "#dbdee1",
-          maxWidth: 96,
+          maxWidth: 100,
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
@@ -115,13 +146,13 @@ function ParticipantTile({ participant }: { participant: Participant }) {
           transition: "color 0.15s ease",
         }}
       >
-        {identity}
+        {displayName}
       </span>
     </div>
   );
 }
 
-// ─── Audio renderer for all remote tracks ────────────────────────────────────
+// ─── Audio for remote participants ────────────────────────────────────────────
 function RemoteAudio() {
   const tracks = useTracks([Track.Source.Microphone]);
   return (
@@ -135,20 +166,9 @@ function RemoteAudio() {
   );
 }
 
-// ─── Main voice grid ──────────────────────────────────────────────────────────
+// ─── Voice grid with native LiveKit ControlBar ────────────────────────────────
 function VoiceGrid({ onLeave }: { onLeave: () => void }) {
   const participants = useParticipants();
-  const { localParticipant } = useLocalParticipant();
-
-  const [micEnabled, setMicEnabled] = useState(true);
-  const [deafened, setDeafened] = useState(false);
-
-  const toggleMic = async () => {
-    await localParticipant.setMicrophoneEnabled(!micEnabled);
-    setMicEnabled((v) => !v);
-  };
-
-  const toggleDeafen = () => setDeafened((v) => !v);
 
   return (
     <div
@@ -160,7 +180,7 @@ function VoiceGrid({ onLeave }: { onLeave: () => void }) {
         fontFamily: "var(--font-sans, 'gg sans', 'Noto Sans', sans-serif)",
       }}
     >
-      {/* ── Participant grid ── */}
+      {/* Participant circles */}
       <div
         style={{
           flex: 1,
@@ -178,92 +198,27 @@ function VoiceGrid({ onLeave }: { onLeave: () => void }) {
         ))}
       </div>
 
-      {/* ── Control bar ── */}
+      {/* Native LiveKit ControlBar — microphone, camera, screen share, chat, leave */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 12,
-          padding: "16px 24px",
-          background: "#232428",
           borderTop: "1px solid #111214",
+          background: "#232428",
+          // Override LK default styles so it fits our dark theme
         }}
       >
-        <ControlButton
-          onClick={toggleMic}
-          active={micEnabled}
-          activeColor="#5865f2"
-          inactiveColor="#ed4245"
-          label={micEnabled ? "Mute" : "Unmute"}
-          icon={micEnabled ? <Mic size={18} /> : <MicOff size={18} />}
-        />
-
-        <ControlButton
-          onClick={onLeave}
-          active={false}
-          activeColor="#ed4245"
-          inactiveColor="#ed4245"
-          label="Leave"
-          icon={<PhoneOff size={18} />}
-          forceActive
+        <ControlBar
+          controls={{
+            microphone: true,
+            camera: true,
+            screenShare: true,
+            chat: true,
+            leave: true,
+          }}
         />
       </div>
 
       <RemoteAudio />
     </div>
-  );
-}
-
-// ─── Reusable control button ──────────────────────────────────────────────────
-function ControlButton({
-  onClick,
-  active,
-  activeColor,
-  inactiveColor,
-  label,
-  icon,
-  forceActive,
-}: {
-  onClick: () => void;
-  active: boolean;
-  activeColor: string;
-  inactiveColor: string;
-  label: string;
-  icon: React.ReactNode;
-  forceActive?: boolean;
-}) {
-  const bg = forceActive || !active ? inactiveColor : "#4e5058";
-
-  return (
-    <button
-      onClick={onClick}
-      title={label}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 4,
-        background: bg,
-        border: "none",
-        borderRadius: 8,
-        padding: "10px 20px",
-        color: "#fff",
-        cursor: "pointer",
-        transition: "background 0.15s, transform 0.1s",
-        fontSize: 12,
-        fontWeight: 600,
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.filter = "brightness(1.15)";
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLButtonElement).style.filter = "none";
-      }}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }
 

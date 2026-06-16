@@ -1,7 +1,4 @@
 // ─── app/api/livekit-token/route.ts ───────────────────────────────────────────
-// Returns a short-lived LiveKit access token for the requesting user.
-// POST { roomName: string }
-
 import { AccessToken } from "livekit-server-sdk";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
@@ -19,13 +16,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "roomName is required" }, { status: 400 });
   }
 
+  // Fetch avatar_url and display_name from profiles table
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name, avatar_url")
+    .eq("id", user.id)
+    .single();
+
+  const displayName =
+    profile?.display_name ??
+    user.user_metadata?.full_name ??
+    user.email ??
+    user.id;
+
   const at = new AccessToken(
     process.env.LIVEKIT_API_KEY!,
     process.env.LIVEKIT_API_SECRET!,
     {
       identity: user.id,
-      name: user.user_metadata?.full_name ?? user.email ?? user.id,
+      name: displayName,
       ttl: "4h",
+      // Pass avatar URL in metadata so clients can render real avatars
+      metadata: JSON.stringify({
+        avatar_url: profile?.avatar_url ?? null,
+        display_name: displayName,
+      }),
     }
   );
 
