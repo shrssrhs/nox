@@ -3,33 +3,33 @@
 import { useState, useRef, useCallback, useEffect, KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useMessages } from "@/hooks/useMessages";
-import type { Message } from "@/hooks/useMessages";
 import { CallRoom } from "@/components/CallRoom";
-import { ProfileModal } from "@/components/ProfileModal";
 import { DMView } from "@/components/DMView";
 import { useConversations, getOrCreateConversation } from "@/hooks/useDMs";
 import type { Conversation } from "@/hooks/useDMs";
-import { ChannelModal } from "@/components/ChannelModal";
-import { UserPreviewModal } from "@/components/UserPreviewModal";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── ИНТЕРФЕЙСЫ И ТИПЫ ДАННЫХ ─────────────────────────────────────────────────
 interface Channel {
   id: string;
   name: string;
   description: string | null;
+  created_by?: string | null;
+  mode?: "open" | "owner_only" | string;
 }
 
 interface Profile {
+  id: string;
   display_name: string | null;
   avatar_url: string | null;
   status: string | null;
+  banner_url?: string | null;
 }
 
 interface ResizeHandleProps {
   onResize: (delta: number) => void;
 }
 
-// ─── Thin drag handle ─────────────────────────────────────────────────────────
+// ─── КОМПОНЕНТ ИЗМЕНЕНИЯ РАЗМЕРА КОЛОНОК (RESIZE HANDLE) ──────────────────────
 function ResizeHandle({ onResize }: ResizeHandleProps) {
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -61,620 +61,535 @@ function ResizeHandle({ onResize }: ResizeHandleProps) {
   return (
     <div
       onMouseDown={onMouseDown}
-      className="group relative z-10 flex w-1 cursor-col-resize items-center justify-center"
-      style={{ flexShrink: 0 }}
-    >
-      {/* Invisible wider hit-area */}
-      <div className="absolute inset-y-0 -left-1 -right-1" />
-      {/* Visible line */}
-      <div className="h-full w-px bg-white/10 transition-colors group-hover:bg-white/30" />
-    </div>
+      className="w-1 cursor-col-resize bg-transparent hover:bg-white/10 transition-colors h-full select-none"
+    />
   );
 }
 
-// ─── Avatar ───────────────────────────────────────────────────────────────────
-function Avatar({ name, url, size = 8 }: { name: string | null; url?: string | null; size?: number }) {
-  const initials = (name ?? "?").slice(0, 1).toUpperCase();
-  const cls = "flex items-center justify-center rounded-full bg-white/10 text-xs font-medium overflow-hidden";
-  const style = { width: size * 4, height: size * 4, flexShrink: 0 as const };
-  if (url) return <img src={url} alt={name ?? ""} className={`${cls} object-cover`} style={style} />;
-  return <div className={cls} style={style}>{initials}</div>;
+// ─── КОМПОНЕНТ ЭЛЕМЕНТА КАНАЛА В СПИСКЕ ───────────────────────────────────────
+function ChannelItem({
+  ch,
+  active,
+  onClick,
+}: {
+  ch: Channel;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+        active
+          ? "bg-white/10 text-white shadow-sm"
+          : "text-white/40 hover:bg-white/5 hover:text-white/70"
+      }`}
+    >
+      <span className="text-white/20 font-mono">#</span>
+      <span className="truncate flex-1 text-left">{ch.name}</span>
+      {ch.mode === "owner_only" && (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-white/20">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+      )}
+    </button>
+  );
 }
 
-// ─── Message bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
-  const name = msg.profiles?.display_name ?? "Unknown";
-  const time = new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const badges = (msg.profiles as any)?.badges || [];
-  const text = msg.content;
-
-  // Стейты для контекстного меню
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-
-  // Стейты для редактирования
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(text);
-
-  const isImage = /\.(jpeg|jpg|gif|png|webp)($|\?)/i.test(text);
-  const isVideo = /\.(mp4|webm|ogg|mov)($|\?)/i.test(text);
-  const isStorageFile = text.startsWith("http") && text.includes("/storage/v1/object/public/");
-
-  // Открытие кастомного меню по ПКМ
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault(); // Глушим дефолтное меню браузера
-    setMenuPosition({ x: e.clientX, y: e.clientY });
-    setMenuVisible(true);
-  };
-
-  // Закрытие меню при клике в любое другое место
-  useEffect(() => {
-    const closeMenu = () => setMenuVisible(false);
-    if (menuVisible) {
-      window.addEventListener("click", closeMenu);
-    }
-    return () => window.removeEventListener("click", closeMenu);
-  }, [menuVisible]);
-
-  // Функции-заглушки для действий
-  const handleCopy = () => {
-    navigator.clipboard.writeText(text);
-  };
-
-  const handleDelete = () => {
-    console.log("Удалить сообщение из Supabase:", msg.id);
-  };
-
-  const handleSaveEdit = () => {
-    console.log("Сохранить изменения в Supabase:", editValue);
-    setIsEditing(false);
-  };
+// ─── КОМПОНЕНТ ЭЛЕМЕНТА ЛИЧНОЙ ПЕРЕПИСКИ (DM ITEM) ───────────────────────────
+function DMItem({
+  conv,
+  active,
+  onClick,
+}: {
+  conv: Conversation;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const u = conv.other_user;
+  const statusEmoji = u.status?.split(" ")[0] ?? "🟢";
 
   return (
-    <div 
-      onContextMenu={handleContextMenu}
-      className={`relative flex gap-3 select-none ${isOwn ? "flex-row-reverse" : ""}`}
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${
+        active ? "bg-white/10" : "hover:bg-white/5"
+      }`}
     >
-      <Avatar name={name} url={msg.profiles?.avatar_url} size={8} />
-      
-      <div className={`flex max-w-[70%] flex-col gap-1 ${isOwn ? "items-end" : ""}`}>
-        <div className="flex items-baseline gap-2">
-          {!isOwn && (
-            <span className="text-xs font-medium text-white/70 flex items-center gap-1">
-              {name}
-              {(["owner","investor","admin","mod","verified"] as const)
-                .filter(r => badges.includes(r))
-                .slice(0, 1)
-                .map(r => {
-                  const colors: Record<string, string> = {
-                    owner: "#F59E0B", investor: "#8B5CF6", admin: "#EF4444",
-                    mod: "#3B82F6", verified: "#10B981"
-                  };
-                  return (
-                    <svg key={r} width="13" height="13" viewBox="0 0 15 15" fill="none">
-                      <circle cx="7.5" cy="7.5" r="7.5" fill={colors[r]} />
-                      <polyline points="3.8,7.5 6.2,10.2 11.2,4.8" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  );
-                })
-              }
-            </span>
-          )}
-          <span className="text-[11px] text-white/30">{time}</span>
-        </div>
-        
-        <div
-          className={`rounded-2xl text-sm leading-relaxed overflow-hidden ${
-            isImage || isVideo 
-              ? "bg-transparent p-0" 
-              : isOwn
-                ? "rounded-tr-sm bg-white/10 px-4 py-2.5 text-white"
-                : "rounded-tl-sm bg-white/5 px-4 py-2.5 text-white/90"
-          }`}
-        >
-          {isEditing ? (
-            <div className="flex flex-col gap-2 min-w-[220px]">
-              <textarea
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm text-white outline-none focus:border-white/20 resize-none font-sans"
-                rows={2}
-              />
-              <div className="flex justify-end gap-1.5 text-xs font-mono">
-                <button onClick={() => setIsEditing(false)} className="text-white/40 hover:text-white px-2 py-1">[cancel]</button>
-                <button onClick={handleSaveEdit} className="text-emerald-400 hover:text-emerald-300 px-2 py-1">[save]</button>
-              </div>
-            </div>
-          ) : isImage ? (
-            <img src={text} alt="Shared media" className="max-w-xs md:max-w-md max-h-72 rounded-xl object-contain border border-white/10 bg-black/20" loading="lazy" />
-          ) : isVideo ? (
-            <video src={text} controls className="max-w-xs md:max-w-md max-h-72 rounded-xl border border-white/10 bg-black/20"/>
-          ) : isStorageFile ? (
-            <a href={text} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-3 rounded-xl transition-colors text-white">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/60">📎</div>
-              <div className="min-w-0 text-left">
-                <p className="text-xs font-medium truncate max-w-[180px] text-white/80">
-                  {text.split('/').pop()?.split('-').slice(1).join('-') || "Shared File"}
-                </p>
-                <p className="text-[10px] text-white/30">Click to download</p>
-              </div>
-            </a>
-          ) : (
-            text
-          )}
-        </div>
+      <div className="relative h-7 w-7 flex-shrink-0 rounded-full bg-white/10 overflow-hidden">
+        {u.avatar_url ? (
+          <img src={u.avatar_url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-white/60">
+            {(u.display_name ?? "?").slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <span className="absolute -bottom-0.5 -right-0.5 text-[9px]">{statusEmoji}</span>
       </div>
-
-      {/* ─── КАСТОМНОЕ КОНТЕКСТНОЕ МЕНЮ (ПКМ) ─── */}
-      {menuVisible && (
-        <div
-          className="fixed z-50 flex flex-col min-w-[120px] bg-[#0D0D0F] border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
-          style={{ top: menuPosition.y, left: menuPosition.x }}
-          onClick={(e) => e.stopPropagation()} // Чтобы клик внутри меню не закрывал его раньше времени
-        >
-          <button className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors">
-            [reply]
-          </button>
-          
-          {isOwn && !isImage && !isVideo && !isStorageFile && (
-            <button 
-              onClick={() => { setIsEditing(true); setMenuVisible(false); }}
-              className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors"
-            >
-              [edit]
-            </button>
-          )}
-          
-          <button className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors">
-            [pin]
-          </button>
-          
-          <button 
-            onClick={() => { handleCopy(); setMenuVisible(false); }}
-            className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors"
-          >
-            [copy]
-          </button>
-          
-          {isOwn && (
-            <div className="my-1 border-t border-white/5" /> // Тонкий разделитель перед удалением
-          )}
-
-          {isOwn && (
-            <button 
-              onClick={() => { handleDelete(); setMenuVisible(false); }}
-              className="w-full text-left font-mono text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
-            >
-              [delete]
-            </button>
-          )}
-        </div>
-      )}
-
-    </div>
+      <div className="flex-1 text-left min-w-0">
+        <p className={`text-sm font-medium truncate ${active ? "text-white" : "text-white/60"}`}>
+          {u.display_name ?? "Unknown"}
+        </p>
+        {conv.last_message && (
+          <p className="text-xs text-white/25 truncate mt-0.5">{conv.last_message}</p>
+        )}
+      </div>
+    </button>
   );
 }
 
-// ─── Member list ──────────────────────────────────────────────────────────────
-const supabaseClient = createClient();
-
-interface MemberListProps {
+// ─── СПИСОК УЧАСТНИКОВ КАНАЛА (MEMBER LIST) ──────────────────────────────────
+function MemberList({
+  channelId,
+  myId,
+  onUserSelect,
+}: {
   channelId: string | null;
   myId: string;
-  onDM: (otherId: string, otherUser: { id: string; display_name: string | null; avatar_url: string | null; status: string | null }) => void;
-}
-
-function MemberList({ channelId, myId, onDM }: MemberListProps) {
-  const [members, setMembers] = useState<{ id: string; display_name: string | null; avatar_url: string | null; status: string | null }[]>([]);
+  onUserSelect: (user: any) => void;
+}) {
+  const [members, setMembers] = useState<any[]>([]);
+  const supabase = createClient();
 
   useEffect(() => {
-    if (!channelId) { setMembers([]); return; }
-    supabaseClient
-      .from("channel_members")
-      .select("profiles(id, display_name, avatar_url, status, username, bio, banner_url, email, badges)")
-      .eq("channel_id", channelId)
-      .then(({ data }) => {
-        const list = (data ?? []).map((r: any) => r.profiles).filter(Boolean);
-        setMembers(list);
-      });
-  }, [channelId]);
-
-  if (!channelId) {
-    return <div className="p-4 text-xs text-white/20">Select a channel to see members.</div>;
-  }
+    if (!channelId) return;
+    async function load() {
+      const { data } = await supabase
+        .from("channel_members")
+        .select("user_id, profiles(id, display_name, avatar_url, status)")
+        .eq("channel_id", channelId);
+      if (data) setMembers(data.map((m: any) => m.profiles).filter(Boolean));
+    }
+    load();
+  }, [channelId, supabase]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-3">
+    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-1">
       {members.map((m) => {
+        if (m.id === myId) return null;
         const emoji = m.status?.split(" ")[0] ?? "🟢";
-        const isMe = m.id === myId;
+        const label = m.status?.split(" ").slice(1).join(" ") ?? "Online";
         return (
-          <div
+          <button
             key={m.id}
-            onClick={() => !isMe && onDM(m.id, m)}
-            className={`group flex items-center gap-2.5 rounded-lg px-2 py-1.5 ${!isMe ? "cursor-pointer hover:bg-white/5" : ""}`}
+            onClick={() => onUserSelect(m)}
+            className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left hover:bg-white/5 transition-colors group"
           >
-            <div className="relative flex-shrink-0">
-              {m.avatar_url
-                ? <img src={m.avatar_url} className="h-7 w-7 rounded-full object-cover" alt=""/>
-                : <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-xs">
-                    {(m.display_name ?? "?").slice(0,1).toUpperCase()}
-                  </div>
-              }
+            <div className="relative h-7 w-7 flex-shrink-0 rounded-full bg-white/10 overflow-hidden">
+              {m.avatar_url ? (
+                <img src={m.avatar_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-white/60">
+                  {m.display_name?.slice(0, 1).toUpperCase()}
+                </div>
+              )}
               <span className="absolute -bottom-0.5 -right-0.5 text-[9px]">{emoji}</span>
             </div>
-            <span className="flex-1 truncate text-xs text-white/60 group-hover:text-white/80 flex items-center gap-1">
-              {m.display_name ?? "Unknown"}
-              {(() => {
-                const badges = (m as any).badges || [];
-                const colors: Record<string, string> = {
-                  owner: "#F59E0B", investor: "#8B5CF6", admin: "#EF4444",
-                  mod: "#3B82F6", verified: "#10B981",
-                };
-                const top = ["owner","investor","admin","mod","verified"].find(r => badges.includes(r));
-                if (!top) return null;
-                return (
-                  <svg width="11" height="11" viewBox="0 0 15 15" fill="none">
-                    <circle cx="7.5" cy="7.5" r="7.5" fill={colors[top]} />
-                    <polyline points="3.8,7.5 6.2,10.2 11.2,4.8" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                );
-              })()}
-              {isMe && <span className="ml-1 text-white/25">(you)</span>}
-            </span>
-            {!isMe && (
-              <svg className="opacity-0 group-hover:opacity-40" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-            )}
-          </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-white/70 group-hover:text-white truncate">
+                {m.display_name ?? "Unknown"}
+              </p>
+              <p className="text-[11px] text-white/25 truncate">{label}</p>
+            </div>
+          </button>
         );
       })}
     </div>
   );
 }
 
-// ─── Main layout ──────────────────────────────────────────────────────────────
+// ─── ОСНОВНОЙ КОМПОНЕНТ ПРИЛОЖЕНИЯ (APPLAYOUT МОНОЛИТ) ───────────────────────
 export function AppLayout() {
   const supabase = createClient();
 
-  // Layout
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [leftWidth, setLeftWidth]   = useState(260);
-  const [rightWidth, setRightWidth] = useState(260);
+  // Параметры ширины колонок сайдбаров
+  const [leftWidth, setLeftWidth] = useState(240);
+  const [rightWidth, setRightWidth] = useState(220);
   const MIN_SIDE = 180;
-  const MAX_SIDE = 480;
-  const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
-  const handleLeftResize  = useCallback((d: number) => setLeftWidth((w)  => clamp(w + d, MIN_SIDE, MAX_SIDE)), []);
-  const handleRightResize = useCallback((d: number) => setRightWidth((w) => clamp(w - d, MIN_SIDE, MAX_SIDE)), []);
+  const MAX_SIDE = 400;
 
-  // Auth / profile
-  const [previewUser, setPreviewUser] = useState<any | null>(null);
-  const [profile, setProfile]     = useState<Profile | null>(null);
-  const [userId, setUserId]       = useState<string | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [channelModalOpen, setChannelModalOpen] = useState(false);
-  
+  const handleLeftResize = useCallback((delta: number) => {
+    setLeftWidth((w) => Math.max(MIN_SIDE, Math.min(MAX_SIDE, w + delta)));
+  }, []);
+
+  const handleRightResize = useCallback((delta: number) => {
+    setRightWidth((w) => Math.max(MIN_SIDE, Math.min(MAX_SIDE, w - delta)));
+  }, []);
+
+  // Состояние навигации и списков
+  const [view, setView] = useState<"channel" | "dm">("channel");
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
+
+  // Пользовательские данные и сессия
+  const [userId, setUserId] = useState<string | null>(null);
+  const [myProfile, setMyProfile] = useState<Profile | null>(null);
+  const { conversations } = useConversations(userId ?? "");
+  const [activeConv, setActiveConv] = useState<Conversation | null>(null);
+
+  // Стейты триггеров модальных окон
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showChannelModal, setShowChannelModal] = useState(false);
+  const [previewUser, setPreviewUser] = useState<any>(null);
+
+  // Модальное окно создания канала (Внутренние стейты)
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newChannelDesc, setNewChannelDesc] = useState("");
+  const [newChannelMode, setNewChannelMode] = useState<"open" | "owner_only">("open");
+
+  // Модальное окно редактирования профиля (Внутренние стейты)
+  const [editName, setEditName] = useState("");
+  const [editStatus, setEditStatus] = useState("");
+  const [editAvatarUrl, setEditAvatarUrl] = useState("");
+
+  // Глобальный изолированный слой звонков (Защита от размонтирования)
+  const [callActive, setCallActive] = useState(false);
+  const [callRoomName, setCallRoomName] = useState<string | null>(null);
+  const [isCallMinimized, setIsCallMinimized] = useState(false);
+
+  // Черновик ввода сообщений
+  const [draft, setDraft] = useState("");
+
+  // Загрузка доступных каналов
+  const loadChannels = useCallback(async (currentUserId: string) => {
+    const { data: m } = await supabase
+      .from("channel_members")
+      .select("channel_id, channels(id, name, description, created_by, mode)")
+      .eq("user_id", currentUserId);
+    if (m) {
+      const list = m.map((row: any) => row.channels).filter(Boolean) as Channel[];
+      setChannels(list);
+      return list;
+    }
+    return [];
+  }, [supabase]);
+
+  // Первичная инициализация сессии
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    async function initUser() {
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
 
-      // Try to get profile from DB first
-      const { data } = await supabase
+      const { data: p } = await supabase
         .from("profiles")
-        .select("display_name, avatar_url, status")
+        .select("id, display_name, avatar_url, status")
         .eq("id", user.id)
         .single();
-
-      if (data) {
-        setProfile(data);
-      } else {
-        setProfile({
-          display_name: user.user_metadata?.full_name ?? user.email ?? "Anonymous",
-          avatar_url: user.user_metadata?.avatar_url ?? null,
-          status: "🟢 Online",
-        });
+      if (p) {
+        setMyProfile(p);
+        setEditName(p.display_name ?? "");
+        setEditStatus(p.status ?? "");
+        setEditAvatarUrl(p.avatar_url ?? "");
       }
-    });
-  }, []);
 
-  // Channels
-  const [channels, setChannels]           = useState<Channel[]>([]);
-  const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
-
-  // DMs
-  const { conversations } = useConversations(userId ?? "");
-  const [activeConv, setActiveConv] = useState<Conversation | null>(null);
-  const [view, setView] = useState<"channel" | "dm">("channel");
-
-  useEffect(() => {
-    // Ждем, пока загрузится реальный userId
-    if (!userId) return;
-  
-    async function loadChannels() {
-      // 1. Берем только те каналы, куда вступил ТЕКУЩИЙ пользователь
-      const { data: members } = await supabase
-        .from("channel_members")
-        .select("channel_id")
-        .eq("user_id", userId);
-  
-      if (!members || members.length === 0) {
-        // Если юзер реально нигде не состоит — открываем модалку онбординга
-        setChannels([]);
-        setChannelModalOpen(true);
-        return;
-      }
-  
-      const ids = members.map((m: any) => m.channel_id);
-  
-      // 2. Достаем инфу по этим каналам
-      const { data: chans } = await supabase
-        .from("channels")
-        .select("id, name, description")
-        .in("id", ids)
-        .order("name");
-  
-      const list = (chans ?? []) as Channel[];
-      setChannels(list);
-      
-      if (list.length > 0) {
-        setActiveChannel(list[0]);
-      }
+      const list = await loadChannels(user.id);
+      if (list.length > 0) setActiveChannel(list[0]);
     }
-  
-    loadChannels();
-  }, [userId]); // <-- Добавили userId в зависимости, чтобы код перезапускался при входе пользователя
+    initUser();
+  }, [supabase, loadChannels]);
 
-  // Messages
-  const { messages, sendMessage, loading, bottomRef } = useMessages(
-    activeChannel?.id ?? ""
-  );
+  const { messages, sendMessage, loading: msgLoading, bottomRef } = useMessages(activeChannel?.id ?? "");
 
-  useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      // Если канал не выбран или сейчас уже идет загрузка — игнорим
-      if (!activeChannel?.id || uploadingFile) return;
-  
-      const items = e.clipboardData?.items;
-      if (!items) return;
-  
-      for (let i = 0; i < items.length; i++) {
-        // Ищем файлы (картинки, файлы и т.д.) среди объектов буфера
-        if (items[i].kind === 'file') {
-          const file = items[i].getAsFile();
-          if (file) {
-            e.preventDefault(); // отменяем стандартное поведение (например, вставку текста [object File])
-            handleFileUpload(file); // передаем файл напрямую в загрузчик
-            break; // берем только первый файл, если их несколько
-          }
-        }
-      }
-    };
-  
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [activeChannel, uploadingFile]); // хук обновится при смене канала
-
-  const handleFileUpload = async (eOrFile: React.ChangeEvent<HTMLInputElement> | File) => {
-    let file: File | null = null;
-  
-    if (eOrFile instanceof File) {
-      file = eOrFile;
-    } else {
-      file = eOrFile.target.files?.[0] || null;
-    }
-  
-    if (!file || !activeChannel?.id) return;
-  
-    try {
-      setUploadingFile(true);
-  
-      const fileExt = file.name.split('.').pop() || 'png';
-      // Если имя файла дефолтное из буфера (image.png), делаем его уникальным
-      const baseName = file.name.startsWith('image') ? 'clipboard' : file.name.split('-')[0];
-      const fileName = `${baseName}-${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-      const filePath = `${activeChannel.id}/${fileName}`;
-  
-      const { data, error } = await supabase.storage
-        .from("attachments")
-        .upload(filePath, file);
-  
-      if (error) throw error;
-  
-      const { data: { publicUrl } } = supabase.storage
-        .from("attachments")
-        .getPublicUrl(filePath);
-  
-      await sendMessage(publicUrl);
-  
-    } catch (error) {
-      console.error("Error uploading file:", error);
-      alert("Failed to upload file");
-    } finally {
-      setUploadingFile(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  // Input
-  const [draft, setDraft] = useState("");
-  const sending = useRef(false);
-
+  // Обработка отправки текстового сообщения
   const handleSend = useCallback(async () => {
-    if (!draft.trim() || sending.current) return;
-    sending.current = true;
+    if (!draft.trim() || !activeChannel || !userId) return;
+    
+    // Валидация прав: режим Owner Only
+    if (activeChannel.mode === "owner_only" && activeChannel.created_by !== userId) {
+      alert("Only the owner can post messages in this channel.");
+      return;
+    }
+
     const text = draft;
     setDraft("");
     await sendMessage(text);
-    sending.current = false;
-  }, [draft, sendMessage]);
+  }, [draft, activeChannel, userId, sendMessage]);
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSend();
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
+
+  // Загрузка медиа-вложений в Storage
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeChannel || !userId) return;
+
+    if (activeChannel.mode === "owner_only" && activeChannel.created_by !== userId) {
+      alert("Only the owner can upload media to this channel.");
+      return;
+    }
+
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${activeChannel.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from("attachments").upload(path, file);
+      if (upErr) throw upErr;
+
+      const { data: { publicUrl } } = supabase.storage.from("attachments").getPublicUrl(path);
+      await sendMessage(publicUrl);
+    } catch (err) {
+      console.error("Upload execution failed:", err);
+    }
+  }, [activeChannel, userId, sendMessage, supabase]);
+
+  // Инициализация голосовой сессии
+  const startCall = () => {
+    if (!activeChannel) return;
+    setCallRoomName(`channel-${activeChannel.id}`);
+    setCallActive(true);
+    setIsCallMinimized(false);
+  };
+
+  // Метод создания нового канала через Supabase RPC/Таблицы
+  const handleCreateChannel = async () => {
+    if (!newChannelName.trim() || !userId) return;
+    try {
+      const { data: channelData, error: chErr } = await supabase
+        .from("channels")
+        .insert({
+          name: newChannelName.trim(),
+          description: newChannelDesc.trim() || null,
+          created_by: userId,
+          mode: newChannelMode
+        })
+        .select()
+        .single();
+
+      if (chErr) {
+        if (chErr.code === "23505") {
+          alert("Ограничение экосистемы: Вы уже являетесь владельцем канала. Один пользователь может создать только один канал.");
+        } else {
+          alert(`Ошибка создания: ${chErr.message}`);
+        }
+        return;
       }
-    },
-    [handleSend]
-  );
 
-  // Call
-  const [callActive, setCallActive] = useState(false);
-  const callRoomName = activeChannel ? `nox-${activeChannel.id}` : "";
+      // Автоматическое добавление создателя в участники канала
+      await supabase.from("channel_members").insert({
+        channel_id: channelData.id,
+        user_id: userId
+      });
+
+      const list = await loadChannels(userId);
+      const updatedCh = list.find((c) => c.id === channelData.id) || channelData;
+      
+      setActiveChannel(updatedCh);
+      setView("channel");
+      setShowChannelModal(false);
+      setNewChannelName("");
+      setNewChannelDesc("");
+      setNewChannelMode("open");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Сохранение изменений профиля
+  const handleSaveProfile = async () => {
+    if (!userId) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        display_name: editName,
+        status: editStatus,
+        avatar_url: editAvatarUrl,
+      })
+      .eq("id", userId);
+
+    if (!error) {
+      setMyProfile({
+        id: userId,
+        display_name: editName,
+        status: editStatus,
+        avatar_url: editAvatarUrl,
+      });
+      setShowProfileModal(false);
+    }
+  };
+
+  const isInputDisabled = activeChannel?.mode === "owner_only" && activeChannel?.created_by !== userId;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-white">
-
-      {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
+    <div className="flex h-screen w-screen overflow-hidden bg-[#070708] text-white font-sans antialiased select-none">
+      
+      {/* ── ЛЕВЫЙ САЙДБАР НАВИГАЦИИ ─────────────────────────────────────── */}
       <aside
         className="flex h-full flex-col border-r border-white/10 bg-[#0D0D0F]"
         style={{ width: leftWidth, minWidth: MIN_SIDE, flexShrink: 0 }}
       >
-        <div className="border-b border-white/10 p-5">
-          <h1 className="text-xl font-semibold tracking-tight">Nox</h1>
-          <button
-            onClick={() => setChannelModalOpen(true)}
-            className="mt-4 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm hover:bg-white/10"
-          >
-            + New Chat
-          </button>
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-white/40 animate-pulse" />
+            <span className="text-xs font-semibold tracking-widest text-white/40 uppercase">Nox Ecosystem</span>
+          </div>
         </div>
 
-        {channelModalOpen && userId && (
-          <ChannelModal
-            userId={userId}
-            onClose={() => setChannelModalOpen(false)}
-            onJoin={(ch) => {
-              setChannels((prev) => {
-                const exists = prev.find((c) => c.id === ch.id);
-                if (exists) return prev;
-                return [...prev, ch];
-              });
-              setActiveChannel(ch);
-              setActiveConv(null);
-              setView("channel");
-            }}
-          />
-        )}
-
-        <nav className="flex-1 overflow-y-auto p-3">
-          {/* Channels */}
-          <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/25">
-            Channels
-          </p>
-          {channels.length === 0 && (
-            <p className="px-2 py-2 text-xs text-white/20">No channels yet</p>
-          )}
-          {channels.map((ch) => (
-            <button
-              key={ch.id}
-              onClick={() => { setActiveChannel(ch); setActiveConv(null); setView("channel"); setCallActive(false); }}
-              className={`mb-0.5 w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                view === "channel" && activeChannel?.id === ch.id
-                  ? "bg-white/10 text-white"
-                  : "text-white/50 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <span className="mr-2 opacity-40">#</span>
-              {ch.name}
-            </button>
-          ))}
-
-          {/* DMs */}
-          <p className="mb-1 mt-4 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/25">
-            Direct Messages
-          </p>
-          {conversations.length === 0 && (
-            <p className="px-2 py-2 text-xs text-white/20">No DMs yet</p>
-          )}
-          {conversations.map((conv) => {
-            const emoji = conv.other_user.status?.split(" ")[0] ?? "🟢";
-            return (
-              <button
-                key={conv.id}
-                onClick={() => { setActiveConv(conv); setActiveChannel(null); setView("dm"); setCallActive(false); }}
-                className={`mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                  view === "dm" && activeConv?.id === conv.id
-                    ? "bg-white/10 text-white"
-                    : "text-white/50 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <div className="relative flex-shrink-0">
-                  {conv.other_user.avatar_url
-                    ? <img src={conv.other_user.avatar_url} className="h-6 w-6 rounded-full object-cover" alt=""/>
-                    : <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[10px]">
-                        {(conv.other_user.display_name ?? "?").slice(0,1).toUpperCase()}
-                      </div>
-                  }
-                  <span className="absolute -bottom-0.5 -right-0.5 text-[8px]">{emoji}</span>
-                </div>
-                <span className="truncate">{conv.other_user.display_name ?? "Unknown"}</span>
+        <div className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-6">
+          {/* Блок каналов */}
+          <div>
+            <div className="flex items-center justify-between px-2 mb-2">
+              <span className="text-[11px] font-bold tracking-wider text-white/20 uppercase">Channels</span>
+              <button onClick={() => setShowChannelModal(true)} className="text-white/40 hover:text-white transition-colors">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
               </button>
-            );
-          })}
-        </nav>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {channels.map((ch) => (
+                <ChannelItem
+                  key={ch.id}
+                  ch={ch}
+                  active={view === "channel" && activeChannel?.id === ch.id}
+                  onClick={() => {
+                    setView("channel");
+                    setActiveChannel(ch);
+                    setActiveConv(null);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
 
-        {/* ── BUTTON SUPPORT PROJECT ──────────────────────────────────────── */}
-        <div className="px-3 mb-2">
-          <a
-            href="https://donatello.to/onir_nox" // Тут измени на свой точный ник в Donatello, если нужно
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-2 px-3 
-                       font-mono text-[11px] text-white/30 rounded-lg 
-                       border border-dashed border-white/10 bg-white/[0.01]
-                       hover:text-white/80 hover:border-white/20 hover:bg-white/[0.03] 
-                       transition-all duration-200 select-none"
-          >
-            <span>[ Support Project ]</span>
-          </a>
+          {/* Блок личных сообщений (DM) */}
+          <div>
+            <div className="px-2 mb-2">
+              <span className="text-[11px] font-bold tracking-wider text-white/20 uppercase">Direct Messages</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {conversations.map((conv) => (
+                <DMItem
+                  key={conv.id}
+                  conv={conv}
+                  active={view === "dm" && activeConv?.id === conv.id}
+                  onClick={() => {
+                    setView("dm");
+                    setActiveConv(conv);
+                    setActiveChannel(null);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* User Profile Block */}
-        <div className="border-t border-white/10 p-4">
+        {/* Профиль оператора в футере сайдбара */}
+        <div className="border-t border-white/10 p-3 bg-[#0A0A0C]">
           <button
-            onClick={() => setProfileOpen(true)}
-            className="flex w-full items-center gap-3 rounded-xl p-1 transition-colors hover:bg-white/5"
+            onClick={() => setShowProfileModal(true)}
+            className="flex w-full items-center gap-3 rounded-xl p-2 hover:bg-white/5 transition-all text-left"
           >
-            <div className="relative">
-              <Avatar name={profile?.display_name ?? null} url={profile?.avatar_url} size={8} />
-              {/* Status dot */}
-              <span className="absolute -bottom-0.5 -right-0.5 text-[10px]">
-                {profile?.status?.split(" ")[0] ?? "🟢"}
-              </span>
+            <div className="h-8 w-8 flex-shrink-0 rounded-full bg-white/10 overflow-hidden">
+              {myProfile?.avatar_url ? (
+                <img src={myProfile.avatar_url} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-white/60">
+                  {myProfile?.display_name?.slice(0, 1).toUpperCase() ?? "U"}
+                </div>
+              )}
             </div>
-            <div className="min-w-0 flex-1 text-left">
-              <p className="truncate text-sm text-white/80">
-                {profile?.display_name ?? "Loading…"}
-              </p>
-              <p className="truncate text-xs text-white/30">
-                {profile?.status?.split(" ").slice(1).join(" ") ?? "Online"}
-              </p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-white/80 truncate">{myProfile?.display_name ?? "Loading profile…"}</p>
+              <p className="text-[11px] text-white/30 truncate">{myProfile?.status ?? "No status set"}</p>
             </div>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
-            </svg>
           </button>
         </div>
-
-        {/* Profile modal */}
-        {profileOpen && userId && (
-          <ProfileModal
-            userId={userId}
-            onClose={() => setProfileOpen(false)}
-            onUpdate={(p) => setProfile({ display_name: p.display_name, avatar_url: p.avatar_url, status: p.status })}
-          />
-        )}
       </aside>
 
       <ResizeHandle onResize={handleLeftResize} />
 
-      {/* ── MAIN CHAT ────────────────────────────────────────────────────── */}
-      <main className="flex min-w-0 flex-1 flex-col">
-        {/* DM view */}
+      {/* ── ОСНОВНОЙ РАБОЧИЙ ЭКРАН (ОКНО ТЕКСТОВОГО СТРИМА) ───────────────── */}
+      <main className="flex h-full flex-1 flex-col bg-[#070708]">
+        {view === "channel" && activeChannel && (
+          <div className="flex h-full flex-col">
+            {/* Хедер канала */}
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-medium text-white"># {activeChannel.name}</h2>
+                  {activeChannel.mode === "owner_only" && (
+                    <span className="text-[10px] bg-white/5 border border-white/10 px-2 py-0.5 rounded-md text-white/40">Read Only</span>
+                  )}
+                </div>
+                {activeChannel.description && <p className="text-xs text-white/30 mt-0.5">{activeChannel.description}</p>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={startCall}
+                  disabled={callActive}
+                  className="flex h-9 items-center gap-2 rounded-xl bg-white/5 px-4 text-xs font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white disabled:opacity-30"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                  </svg>
+                  <span>Voice Studio</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Лента сообщений канала */}
+            <div className="flex-1 overflow-y-auto">
+              {msgLoading ? (
+                <div className="flex h-full items-center justify-center text-sm text-white/20">Loading messages…</div>
+              ) : (
+                <div className="flex flex-col gap-5 p-6">
+                  {messages.map((m: any) => {
+                    const isImg = m.content && m.content.startsWith("http") && (m.content.includes(".png") || m.content.includes(".jpg") || m.content.includes(".jpeg") || m.content.includes("attachments"));
+                    return (
+                      <div key={m.id} className="flex gap-4">
+                        <div className="h-8 w-8 flex-shrink-0 rounded-full bg-white/10 overflow-hidden">
+                          {m.profiles?.avatar_url && <img src={m.profiles.avatar_url} alt="" className="h-full w-full object-cover" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-2 mb-0.5">
+                            <span className="text-sm font-medium text-white/80">{m.profiles?.display_name ?? "Unknown"}</span>
+                            <span className="text-[10px] text-white/20">
+                              {m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                            </span>
+                          </div>
+                          {isImg ? (
+                            <img src={m.content} alt="Attachment" className="mt-1 max-h-60 rounded-xl object-contain border border-white/5 bg-white/5" />
+                          ) : (
+                            <p className="text-sm leading-relaxed text-white/90 break-words">{m.content}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={bottomRef} />
+                </div>
+              )}
+            </div>
+
+            {/* Зона ввода сообщений канала */}
+            <div className="border-t border-white/10 p-4">
+              <div className="flex items-end gap-3">
+                <label className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/40 transition-colors ${isInputDisabled ? "cursor-not-allowed opacity-30" : "cursor-pointer hover:bg-white/10 hover:text-white"}`}>
+                  <input type="file" accept="image/*" onChange={handleFileUpload} disabled={isInputDisabled} className="hidden" />
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                  </svg>
+                </label>
+                <textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  disabled={isInputDisabled}
+                  placeholder={isInputDisabled ? "Only the administrator can write here" : `Message # ${activeChannel.name}`}
+                  rows={1}
+                  className="flex-1 resize-none overflow-hidden rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-white/20 disabled:opacity-50"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Отображение личных переписок DM */}
         {view === "dm" && activeConv && userId && (
           <DMView
             conversationId={activeConv.id}
@@ -683,181 +598,243 @@ export function AppLayout() {
           />
         )}
 
-        {/* Channel view */}
-        {view === "channel" && (<>
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <h2 className="font-medium">{activeChannel?.name ?? "—"}</h2>
-            {activeChannel?.description && (
-              <span className="hidden text-xs text-white/30 sm:block">
-                {activeChannel.description}
-              </span>
-            )}
-          </div>
-
-          {activeChannel && (
-            <button
-              onClick={() => setCallActive((v) => !v)}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition-colors ${
-                callActive
-                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                  : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              {callActive ? (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07"/>
-                    <line x1="1" y1="1" x2="23" y2="23"/>
-                  </svg>
-                  End call
-                </>
-              ) : (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                  </svg>
-                  Call
-                </>
-              )}
-            </button>
-          )}
-        </div>
-
-        {/* LiveKit call panel */}
-        {callActive && activeChannel && (
-          <div className="border-b border-white/10" style={{ height: 340, flexShrink: 0 }}>
-            <CallRoom
-              channelId={activeChannel.id}
-              roomName={callRoomName}
-              onLeave={() => setCallActive(false)}
-            />
-          </div>
-        )}
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex h-full items-center justify-center text-sm text-white/20">
-              Loading…
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 text-white/20">
-              <span className="text-3xl">💬</span>
-              <span className="text-sm">No messages yet. Say hello!</span>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4 p-6">
-              {messages.map((msg) => (
-                <MessageBubble
-                  key={msg.id}
-                  msg={msg}
-                  isOwn={msg.sender_id === userId}
-                />
-              ))}
-              <div ref={bottomRef} />
-            </div>
-          )}
-        </div>
-
-        {/* Input */}
-        <div className="border-t border-white/10 p-4">
-          <div className="flex items-end gap-3">
-                
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileUpload} 
-              className="hidden" 
-              accept="image/*,video/*,application/*"
-            />
-        
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingFile || !activeChannel}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-20"
-            >
-              {uploadingFile ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                </svg>
-              )}
-            </button>
-            
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={activeChannel ? `Message #${activeChannel.name}…` : "Select a channel…"}
-              disabled={!activeChannel || uploadingFile}
-              rows={1}
-              className="flex-1 resize-none overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-white/20 disabled:opacity-30 [&::-webkit-scrollbar]:hidden [&::-webkit-resizer]:hidden"
-              style={{ scrollbarWidth: "none" }}
-            />
-            
-            <button
-              onClick={handleSend}
-              disabled={!draft.trim() || !activeChannel || uploadingFile}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-20"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
-            </button>
-          </div>
-          <p className="mt-2 pl-1 text-[11px] text-white/20">
-            Enter to send · Shift+Enter for new line · Click 📎 to share media
-          </p>
-        </div>
-        </>)}
-
-        {/* Empty state */}
         {!activeChannel && !activeConv && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-white/20">
             <span className="text-4xl">👋</span>
-            <span className="text-sm">Select a channel or DM to start</span>
+            <span className="text-sm">Select a studio channel or DM node</span>
           </div>
         )}
       </main>
 
-      <ResizeHandle onResize={handleRightResize} />
-
-      {/* ── RIGHT PANEL ──────────────────────────────────────────────────── */}
-      <aside
-        className="flex h-full flex-col border-l border-white/10 bg-[#0D0D0F]"
-        style={{ width: rightWidth, minWidth: MIN_SIDE, flexShrink: 0 }}
-      >
-        <div className="border-b border-white/10 px-5 py-4">
-          <h3 className="text-sm font-medium text-white/60">Members</h3>
-        </div>
-        <MemberList
-          key={activeChannel?.id ?? "none"}
-          channelId={activeChannel?.id ?? null}
-          myId={userId ?? ""}
-          onDM={(otherId, otherUser) => {
-            setPreviewUser(otherUser);
-          }}
-        />
-      </aside>
-
-      {previewUser && (
-        <UserPreviewModal
-          user={previewUser}
-          onClose={() => setPreviewUser(null)}
-          onStartDM={async () => {
-            if (!userId) return;
-            const convId = await getOrCreateConversation(userId, previewUser.id);
-            if (!convId) return;
-            setActiveConv({ id: convId, other_user: previewUser });
-            setActiveChannel(null);
-            setView("dm");
+      {/* ── ГЛОБАЛЬНЫЙ СЛОЙ ЗВОНКА (НЕ ЗАВИСИТ ОТ СМЕНЫ ВКЛАДОК КАНАЛОВ И DM) ── */}
+      {callActive && callRoomName && (
+        <CallRoom
+          channelId={activeChannel?.id ?? "dm"}
+          roomName={callRoomName}
+          isMinimized={isCallMinimized}
+          onMinimizeToggle={() => setIsCallMinimized(!isCallMinimized)}
+          onLeave={() => {
+            setCallActive(false);
+            setCallRoomName(null);
           }}
         />
       )}
+
+      {/* ── ПРАВАЯ ПАНЕЛЬ: СПИСОК УЧАСТНИКОВ (РЕНДЕРИТСЯ СТРОГО В КАНАЛАХ) ── */}
+      {view === "channel" && activeChannel && (
+        <>
+          <ResizeHandle onResize={handleRightResize} />
+          <aside
+            className="flex h-full flex-col border-l border-white/10 bg-[#0D0D0F]"
+            style={{ width: rightWidth, minWidth: MIN_SIDE, flexShrink: 0 }}
+          >
+            <div className="border-b border-white/10 px-5 py-4">
+              <h3 className="text-sm font-medium text-white/60">Members</h3>
+            </div>
+            <MemberList
+              key={activeChannel.id}
+              channelId={activeChannel.id}
+              myId={userId ?? ""}
+              onUserSelect={(selectedUser) => setPreviewUser(selectedUser)}
+            />
+          </aside>
+        </>
+      )}
+
+      {/* ── ВСТРОЕННЫЕ СКРИПТЫ МОДАЛЬНЫХ ОКОН (ПРИЛОЖЕНИЕ НА 800+ СТРОК) ── */}
+      
+      {/* 1. Модальное окно создания канала */}
+      {showChannelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0E0E11] p-6 shadow-2xl">
+            <h3 className="text-lg font-medium text-white">Create channel node</h3>
+            <p className="text-xs text-white/40 mt-1 mb-4">Initialize a synchronous streaming point inside the ecosystem.</p>
+            
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-white/30 block mb-1.5">Node Name</label>
+                <input
+                  type="text"
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  placeholder="e.g. design-core"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-white/20"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-white/30 block mb-1.5">Description (Optional)</label>
+                <input
+                  type="text"
+                  value={newChannelDesc}
+                  onChange={(e) => setNewChannelDesc(e.target.value)}
+                  placeholder="System notes or metadata guidelines"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-white/20"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-white/30 block mb-1.5">Broadcast System Mode</label>
+                <div className="grid grid-cols-2 gap-2 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setNewChannelMode("open")}
+                    className={`rounded-xl border p-3 text-left transition-all ${
+                      newChannelMode === "open"
+                        ? "border-white/20 bg-white/5 text-white"
+                        : "border-white/5 bg-transparent text-white/40 hover:border-white/10"
+                    }`}
+                  >
+                    <p className="text-xs font-semibold">Open Channel</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">Every synchronized node user can type and share files.</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewChannelMode("owner_only")}
+                    className={`rounded-xl border p-3 text-left transition-all ${
+                      newChannelMode === "owner_only"
+                        ? "border-white/20 bg-white/5 text-white"
+                        : "border-white/5 bg-transparent text-white/40 hover:border-white/10"
+                    }`}
+                  >
+                    <p className="text-xs font-semibold">Owner Only</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">Read-only system feed for members. Only you can broadcast.</p>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 mt-6 border-t border-white/5 pt-4">
+              <button
+                onClick={() => setShowChannelModal(false)}
+                className="rounded-xl px-4 py-2 text-xs font-medium text-white/40 hover:text-white transition-colors"
+              >
+                Abort
+              </button>
+              <button
+                onClick={handleCreateChannel}
+                disabled={!newChannelName.trim()}
+                className="rounded-xl bg-white text-black px-4 py-2 text-xs font-medium transition-all hover:bg-white/90 disabled:opacity-30"
+              >
+                Deploy Link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Модальное окно редактирования профиля */}
+      {showProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0E0E11] p-6 shadow-2xl">
+            <h3 className="text-lg font-medium text-white">Identity Passport Settings</h3>
+            <p className="text-xs text-white/40 mt-1 mb-4">Modify your globally rendered metadata signature inside the mesh network.</p>
+
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-white/30 block mb-1.5">Display Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-white/20"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-white/30 block mb-1.5">Mesh Node Status Signature</label>
+                <input
+                  type="text"
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  placeholder="e.g. 🟢 Building something unique"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-white/20"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-white/30 block mb-1.5">Avatar Vector URL</label>
+                <input
+                  type="text"
+                  value={editAvatarUrl}
+                  onChange={(e) => setEditAvatarUrl(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-white/20"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 mt-6 border-t border-white/5 pt-4">
+              <button
+                onClick={() => setShowProfileModal(false)}
+                className="rounded-xl px-4 py-2 text-xs font-medium text-white/40 hover:text-white transition-colors"
+              >
+                Discard
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                className="rounded-xl bg-white text-black px-4 py-2 text-xs font-medium transition-all hover:bg-white/90"
+              >
+                Commit Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Карточка предпросмотра пользователя сети (User Preview Profile) */}
+      {previewUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0E0E11] p-5 shadow-2xl overflow-hidden relative">
+            <div className="h-20 bg-gradient-to-r from-white/[0.03] to-white/[0.08] -mx-5 -mt-5 mb-10 border-b border-white/5" />
+            
+            <div className="absolute top-10 left-5">
+              <div className="h-16 w-16 rounded-full border-4 border-[#0E0E11] bg-[#141419] overflow-hidden shadow-xl">
+                {previewUser.avatar_url ? (
+                  <img src={previewUser.avatar_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white/40">
+                    {previewUser.display_name?.slice(0, 1).toUpperCase()}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-2">
+              <h4 className="text-base font-semibold text-white">{previewUser.display_name ?? "Unknown Identity"}</h4>
+              <p className="text-xs text-white/30 mt-0.5 font-mono">ID: {previewUser.id ? previewUser.id.slice(0, 8) : ""}...</p>
+              
+              <div className="mt-4 rounded-xl bg-white/[0.02] border border-white/5 p-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/20 block mb-1">Status Signature</span>
+                <p className="text-xs text-white/80">{previewUser.status ?? "No status established"}</p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-5 border-t border-white/5 pt-4">
+              <button
+                onClick={() => setPreviewUser(null)}
+                className="flex-1 rounded-xl border border-white/5 bg-transparent py-2 text-xs font-medium text-white/50 hover:bg-white/5 hover:text-white transition-all"
+              >
+                Close Node
+              </button>
+              <button
+                onClick={async () => {
+                  if (!userId) return;
+                  const convId = await getOrCreateConversation(userId, previewUser.id);
+                  if (!convId) return;
+                  setActiveConv({ id: convId, other_user: previewUser });
+                  setView("dm");
+                  setActiveChannel(null);
+                  setPreviewUser(null);
+                }}
+                className="flex-1 rounded-xl bg-white py-2 text-xs font-medium text-black hover:bg-white/90 transition-all"
+              >
+                Open Private DM
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

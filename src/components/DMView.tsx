@@ -1,9 +1,9 @@
 "use client";
 
-// components/DMView.tsx
-import { useState, useCallback, KeyboardEvent } from "react";
+import { useState, useCallback, KeyboardEvent, useRef } from "react";
 import { useDMMessages } from "@/hooks/useDMs";
 import type { DMMessage } from "@/hooks/useDMs";
+import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   conversationId: string;
@@ -25,6 +25,14 @@ function Bubble({ msg, isOwn }: { msg: DMMessage; isOwn: boolean }) {
   const name = msg.profiles?.display_name ?? "Unknown";
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+  // Проверка: является ли сообщение URL-ссылкой на вложение изображения
+  const isImg = msg.content.startsWith("http") && (
+    msg.content.includes(".png") || 
+    msg.content.includes(".jpg") || 
+    msg.content.includes(".jpeg") || 
+    msg.content.includes("attachments")
+  );
+
   return (
     <div className={`flex gap-3 ${isOwn ? "flex-row-reverse" : ""}`}>
       <Avatar name={name} url={msg.profiles?.avatar_url}/>
@@ -33,21 +41,31 @@ function Bubble({ msg, isOwn }: { msg: DMMessage; isOwn: boolean }) {
           {!isOwn && <span className="text-xs font-medium text-white/70">{name}</span>}
           <span className="text-[11px] text-white/30">{time}</span>
         </div>
-        <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-          isOwn
-            ? "rounded-tr-sm bg-white/10 text-white"
-            : "rounded-tl-sm bg-white/5 text-white/90"
-        }`}>
-          {msg.content}
-        </div>
+        {isImg ? (
+          <img 
+            src={msg.content} 
+            alt="DM Attachment" 
+            className="mt-1 max-h-64 rounded-2xl object-contain border border-white/5 bg-white/5 shadow-lg"
+          />
+        ) : (
+          <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words ${
+            isOwn
+              ? "rounded-tr-sm bg-white/10 text-white"
+              : "rounded-tl-sm bg-white/5 text-white/90"
+          }`}>
+            {msg.content}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 export function DMView({ conversationId, userId, otherUser }: Props) {
+  const supabase = createClient();
   const { messages, sendDM, loading, bottomRef } = useDMMessages(conversationId);
   const [draft,   setDraft]   = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const sending = { current: false };
 
   const handleSend = useCallback(async () => {
@@ -57,7 +75,30 @@ export function DMView({ conversationId, userId, otherUser }: Props) {
     setDraft("");
     await sendDM(text, userId);
     sending.current = false;
-  }, [draft, userId]);
+  }, [draft, userId, sendDM]);
+
+  // Обработчик загрузки картинок в DM через Supabase Storage
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || sending.current) return;
+
+    sending.current = true;
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `dm-${conversationId}/${Date.now()}.${ext}`;
+      
+      const { error: upErr } = await supabase.storage.from("attachments").upload(path, file);
+      if (upErr) throw upErr;
+
+      const { data: { publicUrl } } = supabase.storage.from("attachments").getPublicUrl(path);
+      await sendDM(publicUrl, userId);
+    } catch (err) {
+      console.error("DM upload execution failed:", err);
+    } finally {
+      sending.current = false;
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [conversationId, userId, sendDM, supabase]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -102,13 +143,32 @@ export function DMView({ conversationId, userId, otherUser }: Props) {
       {/* Input */}
       <div className="border-t border-white/10 p-4">
         <div className="flex items-end gap-3">
+          {/* Скрытый инпут файлов */}
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            accept="image/*" 
+            onChange={handleFileUpload} 
+            className="hidden" 
+          />
+          
+          {/* Кнопка скрепки */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
+
           <textarea
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={`Message ${otherUser.display_name ?? ""}…`}
             rows={1}
-            className="flex-1 resize-none overflow-hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-white/20 [&::-webkit-scrollbar]:hidden"
+            className="flex-1 resize-none overflow-hidden rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-white/20 [&::-webkit-scrollbar]:hidden"
             style={{ scrollbarWidth: "none" }}
           />
           <button
