@@ -17,6 +17,8 @@ import { useEffect, useState } from "react";
 interface CallRoomProps {
   channelId: string;
   roomName: string;
+  isMinimized: boolean;        // ← добавить
+  onMinimizeToggle: () => void; // ← добавить (скорее всего тоже отсутствует)
   onLeave: () => void;
 }
 
