@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, KeyboardEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchUserChannels } from "@/lib/channels";
 import { useMessages } from "@/hooks/useMessages";
 import type { Message } from "@/hooks/useMessages";
 import { CallRoom } from "@/components/CallRoom";
@@ -358,11 +359,11 @@ export function AppLayout() {
   const [channelModalOpen, setChannelModalOpen] = useState(false);
   
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    async function initUser() {
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
 
-      // Try to get profile from DB first
       const { data } = await supabase
         .from("profiles")
         .select("display_name, avatar_url, status")
@@ -378,8 +379,10 @@ export function AppLayout() {
           status: "🟢 Online",
         });
       }
-    });
-  }, []);
+    }
+
+    initUser();
+  }, [supabase]);
 
   // Channels
   const [channels, setChannels]           = useState<Channel[]>([]);
@@ -395,31 +398,16 @@ export function AppLayout() {
     if (!userId) return;
   
     async function loadChannels() {
-      // 1. Берем только те каналы, куда вступил ТЕКУЩИЙ пользователь
-      const { data: members } = await supabase
-        .from("channel_members")
-        .select("channel_id")
-        .eq("user_id", userId);
-  
-      if (!members || members.length === 0) {
-        // Если юзер реально нигде не состоит — открываем модалку онбординга
+      const list = await fetchUserChannels(supabase, userId!);
+
+      if (list.length === 0) {
         setChannels([]);
         setChannelModalOpen(true);
         return;
       }
-  
-      const ids = members.map((m: any) => m.channel_id);
-  
-      // 2. Достаем инфу по этим каналам
-      const { data: chans } = await supabase
-        .from("channels")
-        .select("id, name, description")
-        .in("id", ids)
-        .order("name");
-  
-      const list = (chans ?? []) as Channel[];
+
       setChannels(list);
-      
+
       if (list.length > 0) {
         setActiveChannel(list[0]);
       }

@@ -3,6 +3,7 @@
 // components/ChannelModal.tsx
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { fetchAllChannels } from "@/lib/channels";
 
 const supabase = createClient();
 
@@ -36,19 +37,16 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const { data: allChannels } = await supabase
-        .from("channels")
-        .select("id, name, description")
-        .order("name");
+      const allChannels = await fetchAllChannels(supabase);
 
       const { data: myMemberships } = await supabase
         .from("channel_members")
         .select("channel_id")
         .eq("user_id", userId);
 
-      const myIds = new Set((myMemberships ?? []).map((m: any) => m.channel_id));
+      const myIds = new Set((myMemberships ?? []).map((m: { channel_id: string }) => m.channel_id));
 
-      setChannels((allChannels ?? []).map((ch: any) => ({
+      setChannels(allChannels.map((ch) => ({
         ...ch,
         is_member: myIds.has(ch.id),
       })));
@@ -64,11 +62,14 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
 
   async function handleJoin(ch: Channel) {
     if (!ch.is_member) {
-      await supabase.from("channel_members").insert({
+      const { error } = await supabase.from("channel_members").insert({
         channel_id: ch.id,
         user_id: userId,
-        role: "member",
       });
+      if (error) {
+        console.error("Failed to join channel:", error.message);
+        return;
+      }
     }
     onJoin({ ...ch, is_member: true });
     onClose();
@@ -77,23 +78,57 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
   async function handleCreate() {
     if (!newName.trim()) return;
     setCreating(true);
-    const { data: ch } = await supabase
+
+    const payload = {
+      name: newName.trim().toLowerCase().replace(/\s+/g, "-"),
+      description: newDesc.trim() || null,
+      created_by: userId,
+      mode: newMode,
+    };
+
+    let { data: ch, error } = await supabase
       .from("channels")
-      .insert({
-        name: newName.trim().toLowerCase().replace(/\s+/g, "-"),
-        description: newDesc.trim() || null,
-        created_by: userId,
-        mode: newMode,
-      })
+      .insert(payload)
       .select("id, name, description")
       .single();
 
+    if (error) {
+      const { mode: _mode, ...withoutMode } = payload;
+      ({ data: ch, error } = await supabase
+        .from("channels")
+        .insert(withoutMode)
+        .select("id, name, description")
+        .single());
+    }
+
+    if (error) {
+      const { data: fallback, error: fallbackError } = await supabase
+        .from("channels")
+        .insert({ name: payload.name, created_by: userId })
+        .select("id, name")
+        .single();
+
+      if (fallbackError) {
+        console.error("Failed to create channel:", fallbackError.message);
+        alert(fallbackError.message);
+        setCreating(false);
+        return;
+      }
+
+      ch = { ...fallback, description: null };
+    }
+
     if (ch) {
-      await supabase.from("channel_members").insert({
+      const { error: memberError } = await supabase.from("channel_members").insert({
         channel_id: ch.id,
         user_id: userId,
-        role: "owner",
       });
+      if (memberError) {
+        console.error("Failed to add channel owner:", memberError.message);
+        alert(memberError.message);
+        setCreating(false);
+        return;
+      }
       onJoin(ch);
       onClose();
     }

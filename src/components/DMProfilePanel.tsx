@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+const supabase = createClient();
+
 const BADGE_COLORS: Record<string, string> = {
   owner: "#F59E0B",
   investor: "#8B5CF6",
@@ -29,19 +31,38 @@ interface Props {
 }
 
 export function DMProfilePanel({ userId }: Props) {
-  const supabase = createClient();
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    supabase
-      .from("profiles")
-      .select("id, display_name, username, avatar_url, banner_url, bio, status, badges")
-      .eq("id", userId)
-      .single()
-      .then(({ data }) => {
-        if (data) setProfile(data as Profile);
-      });
-  }, [userId, supabase]);
+    async function loadProfile() {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, display_name, username, avatar_url, banner_url, bio, status, badges")
+        .eq("id", userId)
+        .single();
+
+      if (data) {
+        setProfile(data as Profile);
+        return;
+      }
+
+      if (!error) return;
+
+      const { data: fallback } = await supabase
+        .from("profiles")
+        .select("id, display_name, username, avatar_url, banner_url, bio, status")
+        .eq("id", userId)
+        .single();
+
+      if (fallback) {
+        setProfile({ ...(fallback as Profile), badges: null });
+      } else {
+        console.error("Failed to load DM profile:", error.message);
+      }
+    }
+
+    loadProfile();
+  }, [userId]);
 
   if (!profile) {
     return (
