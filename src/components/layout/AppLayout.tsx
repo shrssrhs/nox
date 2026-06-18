@@ -512,8 +512,16 @@ export function AppLayout() {
 
   // Call
   const [callActive, setCallActive] = useState(false);
-  const [isCallMinimized, setIsCallMinimized] = useState(false);
-  const callRoomName = activeChannel ? `nox-${activeChannel.id}` : "";
+  const [callRoomName, setCallRoomName] = useState("");
+  const [callChannelId, setCallChannelId] = useState("");
+  const [callChannelName, setCallChannelName] = useState("");
+
+  // Inline = viewing the channel where the call is; Floating = everywhere else
+  const callIsInline =
+    callActive &&
+    view === "channel" &&
+    activeChannel?.id === callChannelId;
+  const callIsFloating = callActive && !callIsInline;
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-white">
@@ -561,7 +569,7 @@ export function AppLayout() {
           {channels.map((ch) => (
             <button
               key={ch.id}
-              onClick={() => { setActiveChannel(ch); setActiveConv(null); setView("channel"); setCallActive(false); }}
+              onClick={() => { setActiveChannel(ch); setActiveConv(null); setView("channel"); }}
               className={`mb-0.5 w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 view === "channel" && activeChannel?.id === ch.id
                   ? "bg-white/10 text-white"
@@ -585,7 +593,7 @@ export function AppLayout() {
             return (
               <button
                 key={conv.id}
-                onClick={() => { setActiveConv(conv); setActiveChannel(null); setView("dm"); setCallActive(false); }}
+                onClick={() => { setActiveConv(conv); setActiveChannel(null); setView("dm"); }}
                 className={`mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                   view === "dm" && activeConv?.id === conv.id
                     ? "bg-white/10 text-white"
@@ -673,9 +681,8 @@ export function AppLayout() {
           />
         )}
 
-        {/* Channel view */}
-        {view === "channel" && (<>
-        {/* Header */}
+        {/* Channel header */}
+        {view === "channel" && (
         <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
           <div className="flex items-center gap-3">
             <h2 className="font-medium">{activeChannel?.name ?? "—"}</h2>
@@ -689,20 +696,25 @@ export function AppLayout() {
           {activeChannel && (
             <button
               onClick={() => {
-                if (callActive) {
+                if (callActive && activeChannel.id === callChannelId) {
                   setCallActive(false);
-                  setIsCallMinimized(false);
+                  setCallRoomName("");
+                  setCallChannelId("");
+                  setCallChannelName("");
                 } else {
+                  setCallRoomName(`nox-${activeChannel.id}`);
+                  setCallChannelId(activeChannel.id);
+                  setCallChannelName(activeChannel.name);
                   setCallActive(true);
                 }
               }}
               className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition-colors ${
-                callActive
+                callActive && activeChannel.id === callChannelId
                   ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
                   : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
               }`}
             >
-              {callActive ? (
+              {callActive && activeChannel.id === callChannelId ? (
                 <>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07"/>
@@ -721,23 +733,131 @@ export function AppLayout() {
             </button>
           )}
         </div>
+        )}
 
-        {/* LiveKit call panel */}
-        {callActive && activeChannel && (
-          <div className="border-b border-white/10" style={{ height: 340, flexShrink: 0 }}>
-            <CallRoom
-              channelId={activeChannel.id}
-              roomName={callRoomName}
-              isMinimized={isCallMinimized}
-              onMinimizeToggle={() => setIsCallMinimized((v) => !v)}
-              onLeave={() => {
-                setCallActive(false);
-                setIsCallMinimized(false);
-              }}
-            />
+        {/* Call panel — persists across view changes via CSS-only mode switch */}
+        {callActive && callRoomName && (
+          <div
+            style={
+              callIsInline
+                ? {
+                    height: 340,
+                    flexShrink: 0,
+                    borderBottom: "1px solid rgba(255,255,255,0.1)",
+                  }
+                : {
+                    position: "fixed",
+                    bottom: 24,
+                    right: 24,
+                    width: 320,
+                    height: 224,
+                    zIndex: 50,
+                    borderRadius: 16,
+                    overflow: "hidden",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    boxShadow: "0 8px 40px rgba(0,0,0,0.65)",
+                    background: "#0D0D0F",
+                    display: "flex",
+                    flexDirection: "column",
+                  }
+            }
+          >
+            {/* Floating header */}
+            {callIsFloating && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "7px 12px",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  flexShrink: 0,
+                  background: "rgba(0,0,0,0.25)",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.55)",
+                    fontWeight: 600,
+                  }}
+                >
+                  #{callChannelName}
+                </span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <button
+                    onClick={() => {
+                      const ch = channels.find((c) => c.id === callChannelId);
+                      if (ch) {
+                        setActiveChannel(ch);
+                        setActiveConv(null);
+                        setView("channel");
+                      }
+                    }}
+                    title="Return to call"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "rgba(255,255,255,0.45)",
+                      padding: 0,
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                      <polyline points="15 3 21 3 21 9"/>
+                      <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCallActive(false);
+                      setCallRoomName("");
+                      setCallChannelId("");
+                      setCallChannelName("");
+                    }}
+                    title="End call"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "rgba(239,68,68,0.65)",
+                      padding: 0,
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <CallRoom
+                channelId={callChannelId}
+                roomName={callRoomName}
+                isMinimized={false}
+                isFloating={callIsFloating}
+                onMinimizeToggle={() => {}}
+                onLeave={() => {
+                  setCallActive(false);
+                  setCallRoomName("");
+                  setCallChannelId("");
+                  setCallChannelName("");
+                }}
+              />
+            </div>
           </div>
         )}
 
+        {/* Channel messages + input */}
+        {view === "channel" && (<>
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
