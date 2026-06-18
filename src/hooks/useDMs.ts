@@ -133,12 +133,7 @@ export function useDMMessages(conversationId: string) {
       .channel(`dm:${conversationId}`)
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "direct_messages",
-          filter: `conversation_id=eq.${conversationId}`,
-        },
+        { event: "INSERT", schema: "public", table: "direct_messages", filter: `conversation_id=eq.${conversationId}` },
         async (payload) => {
           const { data } = await supabase
             .from("direct_messages")
@@ -146,6 +141,22 @@ export function useDMMessages(conversationId: string) {
             .eq("id", payload.new.id)
             .single();
           if (data) setMessages((prev) => [...prev, data as DMMessage]);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "direct_messages", filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          setMessages((prev) =>
+            prev.map((m) => m.id === payload.new.id ? { ...m, content: payload.new.content } : m)
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "direct_messages", filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          setMessages((prev) => prev.filter((m) => m.id !== payload.old.id));
         }
       )
       .subscribe();
@@ -166,5 +177,13 @@ export function useDMMessages(conversationId: string) {
     });
   }
 
-  return { messages, sendDM, loading, bottomRef };
+  async function editDM(msgId: string, content: string) {
+    await supabase.from("direct_messages").update({ content }).eq("id", msgId);
+  }
+
+  async function deleteDM(msgId: string) {
+    await supabase.from("direct_messages").delete().eq("id", msgId);
+  }
+
+  return { messages, sendDM, editDM, deleteDM, loading, bottomRef };
 }
