@@ -304,6 +304,49 @@ function MessageBubble({
   );
 }
 
+// ─── Pinned messages banner ───────────────────────────────────────────────────
+function PinnedBanner({ pinnedMessages }: { pinnedMessages: Message[] }) {
+  const [idx, setIdx] = useState(0);
+  const total = pinnedMessages.length;
+
+  useEffect(() => {
+    if (total <= 1) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % total), 5000);
+    return () => clearInterval(t);
+  }, [total]);
+
+  useEffect(() => { setIdx(0); }, [total]);
+
+  const msg = pinnedMessages[idx % total];
+  if (!msg) return null;
+
+  const REPLY_RE_LOCAL = /^«R»(.+?)»(.+?)«end»\n?/;
+  const text = msg.content.replace(REPLY_RE_LOCAL, "");
+  const author = msg.profiles?.display_name ?? "Unknown";
+  const isMedia = /\.(jpeg|jpg|gif|png|webp|mp4|webm|ogg|mov)($|\?)/i.test(text);
+
+  return (
+    <div className="flex flex-shrink-0 items-center gap-3 border-b border-white/10 bg-white/[0.015] px-5 py-2">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/30 flex-shrink-0">
+        <line x1="12" y1="17" x2="12" y2="22"/>
+        <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+      </svg>
+      <span className="min-w-0 flex-1 truncate text-[11px] text-white/40">
+        <span className="font-medium text-white/55">{author}</span>
+        {" · "}
+        {isMedia ? "📎 media" : text.slice(0, 80)}
+      </span>
+      {total > 1 && (
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button onClick={() => setIdx((i) => (i - 1 + total) % total)} className="text-white/20 hover:text-white/60 text-xs">‹</button>
+          <span className="text-[10px] text-white/25">{idx + 1}/{total}</span>
+          <button onClick={() => setIdx((i) => (i + 1) % total)} className="text-white/20 hover:text-white/60 text-xs">›</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Member list ──────────────────────────────────────────────────────────────
 const supabaseClient = createClient();
 
@@ -580,6 +623,8 @@ export function AppLayout() {
 
     return () => { supabase.removeChannel(sub); };
   }, [activeChannel?.id]);
+
+  const pinnedMessages = messages.filter((m) => pinnedIds.has(m.id));
 
   const handlePin = useCallback(async (msgId: string) => {
     if (!activeChannel || !userId) return;
@@ -978,6 +1023,8 @@ export function AppLayout() {
 
         {/* Channel messages + input */}
         {view === "channel" && (<>
+        {/* Pinned banner */}
+        {pinnedMessages.length > 0 && <PinnedBanner pinnedMessages={pinnedMessages} />}
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
