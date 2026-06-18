@@ -283,10 +283,9 @@ function CallLayout({ onLeave }: { onLeave: () => void }) {
               microphone: true,
               camera: true,
               screenShare: true,
-              chat: true,   // кнопка чата, работает через LayoutContext
+              chat: true,
               leave: true,
             }}
-            onLeave={onLeave}
           />
         </div>
 
