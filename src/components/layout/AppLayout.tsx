@@ -744,6 +744,8 @@ export function AppLayout() {
                     height: 340,
                     flexShrink: 0,
                     borderBottom: "1px solid rgba(255,255,255,0.1)",
+                    display: "flex" as const,
+                    flexDirection: "column" as const,
                   }
                 : {
                     position: "fixed",
