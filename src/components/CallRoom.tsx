@@ -104,22 +104,28 @@ function AvatarTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) {
       }
     } catch {}
 
-    // 2. Тянем banner_url из /api/profile
-    fetch(`/api/profile?id=${participant.identity}`)
-      .then((r) => r.json())
-      .then((profile) => {
-        if (profile && !profile.error) {
-          setInfo({
-            avatar_url: profile.avatar_url ?? null,
-            banner_url: profile.banner_url ?? null,
-            display_name:
-              profile.display_name ??
-              participant.name ??
-              participant.identity,
-          });
-        }
-      })
-      .catch(() => {});
+    // 2. Тянем banner_url из /api/profile (только для реальных UUID, не placeholder)
+    const isUUID =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        participant.identity
+      );
+    if (isUUID) {
+      fetch(`/api/profile?id=${participant.identity}`)
+        .then((r) => r.json())
+        .then((profile) => {
+          if (profile && !profile.error) {
+            setInfo({
+              avatar_url: profile.avatar_url ?? null,
+              banner_url: profile.banner_url ?? null,
+              display_name:
+                profile.display_name ??
+                participant.name ??
+                participant.identity,
+            });
+          }
+        })
+        .catch(() => {});
+    }
   }, [participant.identity, participant.metadata]);
 
   // ── Демонстрация экрана (16:9, без квадрата) ──────────────────────────────
