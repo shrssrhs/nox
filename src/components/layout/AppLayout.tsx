@@ -550,28 +550,45 @@ export function AppLayout() {
   // Reply
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
 
-  // Pins (per-channel, localStorage)
+  // Pins (server-side, Supabase)
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!activeChannel) { setPinnedIds(new Set()); return; }
-    try {
-      const stored: string[] = JSON.parse(localStorage.getItem(`pins:${activeChannel.id}`) || "[]");
-      setPinnedIds(new Set(stored));
-    } catch {
-      setPinnedIds(new Set());
-    }
+
+    supabase
+      .from("pins")
+      .select("message_id")
+      .eq("channel_id", activeChannel.id)
+      .then(({ data }) => {
+        setPinnedIds(new Set((data ?? []).map((r: any) => r.message_id)));
+      });
+
+    const sub = supabase
+      .channel(`pins:${activeChannel.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "pins", filter: `channel_id=eq.${activeChannel.id}` },
+        (p) => setPinnedIds((prev) => new Set([...prev, p.new.message_id]))
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "pins", filter: `channel_id=eq.${activeChannel.id}` },
+        (p) => setPinnedIds((prev) => { const n = new Set(prev); n.delete(p.old.message_id); return n; })
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(sub); };
   }, [activeChannel?.id]);
 
-  const handlePin = useCallback((msgId: string) => {
-    if (!activeChannel) return;
-    setPinnedIds(prev => {
-      const next = new Set(prev);
-      next.has(msgId) ? next.delete(msgId) : next.add(msgId);
-      localStorage.setItem(`pins:${activeChannel.id}`, JSON.stringify([...next]));
-      return next;
-    });
-  }, [activeChannel]);
+  const handlePin = useCallback(async (msgId: string) => {
+    if (!activeChannel || !userId) return;
+    if (pinnedIds.has(msgId)) {
+      await supabase.from("pins").delete().eq("message_id", msgId).eq("channel_id", activeChannel.id);
+    } else {
+      await supabase.from("pins").insert({ message_id: msgId, channel_id: activeChannel.id, pinned_by: userId });
+    }
+  }, [activeChannel, userId, pinnedIds]);
 
   // Input
   const [draft, setDraft] = useState("");
