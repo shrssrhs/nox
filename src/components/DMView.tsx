@@ -55,14 +55,8 @@ function Bubble({
 
   useEffect(() => {
     const close = () => setMenuVisible(false);
-    if (menuVisible) {
-      window.addEventListener("click", close);
-      window.addEventListener("contextmenu", close);
-    }
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("contextmenu", close);
-    };
+    if (menuVisible) window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
   }, [menuVisible]);
 
   const handleCopy = async () => {

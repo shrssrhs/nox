@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { FEmoji, StatusDot } from "@/components/FEmoji";
+import { StatusDot } from "@/components/FEmoji";
 
 const supabase = createClient();
 
@@ -273,7 +273,7 @@ export function ProfileModal({ userId, onClose, onUpdate }: ProfileModalProps) {
                             : "border-white/5 bg-white/5 text-white/40 hover:bg-white/10 hover:text-white"
                         }`}
                       >
-                        <FEmoji emoji={s.emoji} size={14} /><span>{s.label}</span>
+                        <StatusDot status={s.emoji} size={10} /><span>{s.label}</span>
                       </button>
                     );
                   })}
