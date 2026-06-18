@@ -10,6 +10,7 @@ import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
 import { ProfileModal } from "@/components/ProfileModal";
 import { DMView } from "@/components/DMView";
 import { useConversations, getOrCreateConversation } from "@/hooks/useDMs";
+import { useUnread } from "@/hooks/useUnread";
 import type { Conversation } from "@/hooks/useDMs";
 import { ChannelModal } from "@/components/ChannelModal";
 import { DMProfilePanel } from "@/components/DMProfilePanel";
@@ -88,11 +89,13 @@ function Avatar({ name, url, size = 8 }: { name: string | null; url?: string | n
 const REPLY_RE = /^«R»(.+?)»(.+?)«end»\n?/;
 
 function MessageBubble({
-  msg, isOwn, isPinned, onReply, onPin,
+  msg, isOwn, isPinned, onReply, onPin, onEdit, onDelete,
 }: {
   msg: Message; isOwn: boolean; isPinned: boolean;
   onReply: (msg: Message) => void;
   onPin: (msgId: string) => void;
+  onEdit: (msgId: string, content: string) => Promise<void>;
+  onDelete: (msgId: string) => Promise<void>;
 }) {
   const name = msg.profiles?.display_name ?? "Unknown";
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -211,7 +214,15 @@ function MessageBubble({
               />
               <div className="flex justify-end gap-1.5 text-xs font-mono">
                 <button onClick={() => setIsEditing(false)} className="text-white/40 hover:text-white px-2 py-1">[cancel]</button>
-                <button onClick={() => setIsEditing(false)} className="text-emerald-400 hover:text-emerald-300 px-2 py-1">[save]</button>
+                <button
+                  onClick={async () => {
+                    if (editValue.trim()) await onEdit(msg.id, editValue.trim());
+                    setIsEditing(false);
+                  }}
+                  className="text-emerald-400 hover:text-emerald-300 px-2 py-1"
+                >
+                  [save]
+                </button>
               </div>
             </div>
           ) : isImage ? (
@@ -276,7 +287,10 @@ function MessageBubble({
 
           {isOwn && <div className="my-1 border-t border-white/5" />}
           {isOwn && (
-            <button className="w-full text-left font-mono text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors">
+            <button
+              onClick={() => { onDelete(msg.id); setMenuVisible(false); }}
+              className="w-full text-left font-mono text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
+            >
               [delete]
             </button>
           )}
@@ -449,8 +463,21 @@ export function AppLayout() {
     loadChannels();
   }, [userId]); // <-- Добавили userId в зависимости, чтобы код перезапускался при входе пользователя
 
+  // Unread counts + browser notifications
+  const activeId = view === "channel" ? (activeChannel?.id ?? null) : (activeConv?.id ?? null);
+  const { unread, markRead } = useUnread({
+    channelIds: channels.map((c) => c.id),
+    channelNames: Object.fromEntries(channels.map((c) => [c.id, c.name])),
+    convIds: conversations.map((c) => c.id),
+    convNames: Object.fromEntries(
+      conversations.map((c) => [c.id, c.other_user.display_name ?? "DM"])
+    ),
+    activeId,
+    userId,
+  });
+
   // Messages
-  const { messages, sendMessage, loading, bottomRef } = useMessages(
+  const { messages, sendMessage, editMessage, deleteMessage, loading, bottomRef } = useMessages(
     activeChannel?.id ?? ""
   );
 
@@ -634,15 +661,19 @@ export function AppLayout() {
           {channels.map((ch) => (
             <button
               key={ch.id}
-              onClick={() => { setActiveChannel(ch); setActiveConv(null); setView("channel"); }}
-              className={`mb-0.5 w-full rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+              onClick={() => { setActiveChannel(ch); setActiveConv(null); setView("channel"); markRead(ch.id); }}
+              className={`mb-0.5 w-full rounded-lg px-3 py-2 text-left text-sm transition-colors flex items-center justify-between ${
                 view === "channel" && activeChannel?.id === ch.id
                   ? "bg-white/10 text-white"
                   : "text-white/50 hover:bg-white/5 hover:text-white"
               }`}
             >
-              <span className="mr-2 opacity-40">#</span>
-              {ch.name}
+              <span><span className="mr-2 opacity-40">#</span>{ch.name}</span>
+              {!!unread[ch.id] && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white/20 px-1 text-[10px] font-bold text-white">
+                  {unread[ch.id] > 99 ? "99+" : unread[ch.id]}
+                </span>
+              )}
             </button>
           ))}
 
@@ -658,7 +689,7 @@ export function AppLayout() {
             return (
               <button
                 key={conv.id}
-                onClick={() => { setActiveConv(conv); setActiveChannel(null); setView("dm"); }}
+                onClick={() => { setActiveConv(conv); setActiveChannel(null); setView("dm"); markRead(conv.id); }}
                 className={`mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                   view === "dm" && activeConv?.id === conv.id
                     ? "bg-white/10 text-white"
@@ -674,7 +705,12 @@ export function AppLayout() {
                   }
                   <span className="absolute -bottom-0.5 -right-0.5 text-[8px]">{emoji}</span>
                 </div>
-                <span className="truncate">{conv.other_user.display_name ?? "Unknown"}</span>
+                <span className="truncate flex-1">{conv.other_user.display_name ?? "Unknown"}</span>
+                {!!unread[conv.id] && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white/20 px-1 text-[10px] font-bold text-white flex-shrink-0">
+                    {unread[conv.id] > 99 ? "99+" : unread[conv.id]}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -946,6 +982,8 @@ export function AppLayout() {
                   isPinned={pinnedIds.has(msg.id)}
                   onReply={setReplyingTo}
                   onPin={handlePin}
+                  onEdit={editMessage}
+                  onDelete={deleteMessage}
                 />
               ))}
               <div ref={bottomRef} />

@@ -1,12 +1,9 @@
 "use client";
 
-// hooks/useMessages.ts
-// Usage: const { messages, sendMessage } = useMessages(channelId)
-
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-const supabase = createClient(); // создаём один раз вне хука
+const supabase = createClient();
 
 export interface Message {
   id: string;
@@ -21,7 +18,6 @@ export function useMessages(channelId: string) {
   const [loading, setLoading] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Initial fetch
   useEffect(() => {
     if (!channelId) return;
 
@@ -38,19 +34,12 @@ export function useMessages(channelId: string) {
 
     fetchMessages();
 
-    // Realtime subscription
     const channel = supabase
       .channel(`messages:${channelId}`)
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `channel_id=eq.${channelId}`,
-        },
+        { event: "INSERT", schema: "public", table: "messages", filter: `channel_id=eq.${channelId}` },
         async (payload) => {
-          // Fetch full row with profile join
           const { data } = await supabase
             .from("messages")
             .select("*, profiles(display_name, avatar_url)")
@@ -59,12 +48,29 @@ export function useMessages(channelId: string) {
           if (data) setMessages((prev) => [...prev, data as Message]);
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "messages", filter: `channel_id=eq.${channelId}` },
+        (payload) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === payload.new.id ? { ...m, content: payload.new.content } : m
+            )
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "messages", filter: `channel_id=eq.${channelId}` },
+        (payload) => {
+          setMessages((prev) => prev.filter((m) => m.id !== payload.old.id));
+        }
+      )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [channelId]);
 
-  // Auto-scroll
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -72,7 +78,6 @@ export function useMessages(channelId: string) {
   async function sendMessage(content: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user || !content.trim()) return;
-
     await supabase.from("messages").insert({
       channel_id: channelId,
       sender_id: user.id,
@@ -80,5 +85,13 @@ export function useMessages(channelId: string) {
     });
   }
 
-  return { messages, sendMessage, loading, bottomRef };
+  const editMessage = useCallback(async (msgId: string, content: string) => {
+    await supabase.from("messages").update({ content }).eq("id", msgId);
+  }, []);
+
+  const deleteMessage = useCallback(async (msgId: string) => {
+    await supabase.from("messages").delete().eq("id", msgId);
+  }, []);
+
+  return { messages, sendMessage, editMessage, deleteMessage, loading, bottomRef };
 }
