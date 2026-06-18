@@ -15,6 +15,7 @@ import type { Conversation } from "@/hooks/useDMs";
 import { ChannelModal } from "@/components/ChannelModal";
 import { DMProfilePanel } from "@/components/DMProfilePanel";
 import { UserPreviewModal } from "@/components/UserPreviewModal";
+import { FEmoji, statusEmoji } from "@/components/FEmoji";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Channel {
@@ -378,7 +379,6 @@ function MemberList({ channelId, myId, onDM }: MemberListProps) {
   return (
     <div className="flex-1 overflow-y-auto p-3">
       {members.map((m) => {
-        const emoji = m.status?.split(" ")[0] ?? "🟢";
         const isMe = m.id === myId;
         return (
           <div
@@ -393,7 +393,9 @@ function MemberList({ channelId, myId, onDM }: MemberListProps) {
                     {(m.display_name ?? "?").slice(0,1).toUpperCase()}
                   </div>
               }
-              <span className="absolute -bottom-0.5 -right-0.5 text-[9px]">{emoji}</span>
+              <span className="absolute -bottom-0.5 -right-0.5">
+                <FEmoji emoji={statusEmoji(m.status)} size={11} />
+              </span>
             </div>
             <span className="flex-1 truncate text-xs text-white/60 group-hover:text-white/80 flex items-center gap-1">
               {m.display_name ?? "Unknown"}
@@ -747,7 +749,6 @@ export function AppLayout() {
             <p className="px-2 py-2 text-xs text-white/20">No DMs yet</p>
           )}
           {conversations.map((conv) => {
-            const emoji = conv.other_user.status?.split(" ")[0] ?? "🟢";
             return (
               <button
                 key={conv.id}
@@ -765,7 +766,9 @@ export function AppLayout() {
                         {(conv.other_user.display_name ?? "?").slice(0,1).toUpperCase()}
                       </div>
                   }
-                  <span className="absolute -bottom-0.5 -right-0.5 text-[8px]">{emoji}</span>
+                  <span className="absolute -bottom-0.5 -right-0.5">
+                    <FEmoji emoji={statusEmoji(conv.other_user.status)} size={10} />
+                  </span>
                 </div>
                 <span className="truncate flex-1">{conv.other_user.display_name ?? "Unknown"}</span>
                 {!!unread[conv.id] && (
@@ -802,9 +805,8 @@ export function AppLayout() {
           >
             <div className="relative">
               <Avatar name={profile?.display_name ?? null} url={profile?.avatar_url} size={8} />
-              {/* Status dot */}
-              <span className="absolute -bottom-0.5 -right-0.5 text-[10px]">
-                {profile?.status?.split(" ")[0] ?? "🟢"}
+              <span className="absolute -bottom-0.5 -right-0.5">
+                <FEmoji emoji={statusEmoji(profile?.status)} size={12} />
               </span>
             </div>
             <div className="min-w-0 flex-1 text-left">
@@ -1033,7 +1035,7 @@ export function AppLayout() {
             </div>
           ) : messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-white/20">
-              <span className="text-3xl">💬</span>
+              <FEmoji emoji="💬" size={40} />
               <span className="text-sm">No messages yet. Say hello!</span>
             </div>
           ) : (
@@ -1125,7 +1127,7 @@ export function AppLayout() {
         {/* Empty state */}
         {!activeChannel && !activeConv && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-white/20">
-            <span className="text-4xl">👋</span>
+            <FEmoji emoji="👋" size={48} />
             <span className="text-sm">Select a channel or DM to start</span>
           </div>
         )}

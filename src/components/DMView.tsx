@@ -5,6 +5,7 @@ import { useDMMessages } from "@/hooks/useDMs";
 import type { DMMessage } from "@/hooks/useDMs";
 import { createClient } from "@/lib/supabase/client";
 import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
+import { FEmoji, statusEmoji } from "@/components/FEmoji";
 
 const REPLY_RE = /^«R»(.+?)»(.+?)«end»\n?/;
 
@@ -226,7 +227,6 @@ export function DMView({ conversationId, userId, otherUser }: Props) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   }, [handleSend]);
 
-  const statusEmoji = otherUser.status?.split(" ")[0] ?? "🟢";
   const statusLabel = otherUser.status?.split(" ").slice(1).join(" ") ?? "Online";
 
   return (
@@ -235,7 +235,9 @@ export function DMView({ conversationId, userId, otherUser }: Props) {
       <div className="flex items-center gap-3 border-b border-white/10 px-6 py-4 flex-shrink-0">
         <div className="relative">
           <Avatar name={otherUser.display_name} url={otherUser.avatar_url}/>
-          <span className="absolute -bottom-0.5 -right-0.5 text-[10px]">{statusEmoji}</span>
+          <span className="absolute -bottom-0.5 -right-0.5">
+            <FEmoji emoji={statusEmoji(otherUser.status)} size={12} />
+          </span>
         </div>
         <div>
           <p className="font-medium text-white">{otherUser.display_name ?? "Unknown"}</p>
