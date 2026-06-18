@@ -6,6 +6,7 @@ import { fetchUserChannels } from "@/lib/channels";
 import { useMessages } from "@/hooks/useMessages";
 import type { Message } from "@/hooks/useMessages";
 import { CallRoom } from "@/components/CallRoom";
+import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
 import { ProfileModal } from "@/components/ProfileModal";
 import { DMView } from "@/components/DMView";
 import { useConversations, getOrCreateConversation } from "@/hooks/useDMs";
@@ -107,10 +108,13 @@ function MessageBubble({
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const isImage = /\.(jpeg|jpg|gif|png|webp)($|\?)/i.test(text);
   const isVideo = /\.(mp4|webm|ogg|mov)($|\?)/i.test(text);
   const isStorageFile = text.startsWith("http") && text.includes("/storage/v1/object/public/");
+  const fileExt = getFileExt(text);
+  const isCodeFile = isStorageFile && fileExt in CODE_LANGS;
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -211,9 +215,30 @@ function MessageBubble({
               </div>
             </div>
           ) : isImage ? (
-            <img src={text} alt="Shared media" className="max-w-xs md:max-w-md max-h-72 rounded-xl object-contain border border-white/10 bg-black/20" loading="lazy" />
+            <img
+              src={text}
+              alt="Shared media"
+              onClick={() => setPreviewUrl(text)}
+              className="max-w-xs md:max-w-md max-h-72 rounded-xl object-contain border border-white/10 bg-black/20 cursor-zoom-in"
+              loading="lazy"
+            />
           ) : isVideo ? (
             <video src={text} controls className="max-w-xs md:max-w-md max-h-72 rounded-xl border border-white/10 bg-black/20"/>
+          ) : isCodeFile ? (
+            <button
+              onClick={() => setPreviewUrl(text)}
+              className="flex items-center gap-3 bg-white/5 hover:bg-white/8 border border-white/10 px-4 py-3 rounded-xl transition-colors text-left w-full"
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/50 font-mono text-[10px] font-bold">
+                {fileExt.toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium truncate max-w-[180px] text-white/80">
+                  {text.split("/").pop()?.split("-").slice(0, 1).join("") + "." + fileExt || "File"}
+                </p>
+                <p className="text-[10px] text-white/30">{CODE_LANGS[fileExt]} · click to view</p>
+              </div>
+            </button>
           ) : isStorageFile ? (
             <a href={text} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-3 rounded-xl transition-colors text-white">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/60">📎</div>
@@ -256,6 +281,10 @@ function MessageBubble({
             </button>
           )}
         </div>
+      )}
+
+      {previewUrl && (
+        <FilePreview url={previewUrl} onClose={() => setPreviewUrl(null)} />
       )}
     </div>
   );
