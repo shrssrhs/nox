@@ -36,28 +36,11 @@ interface ParticipantInfo {
   display_name: string;
 }
 
-// ─── Name tag стиль ───────────────────────────────────────────────────────────
-const nameTagStyle: React.CSSProperties = {
-  position: "absolute",
-  bottom: "10px",
-  left: "10px",
-  fontSize: "12px",
-  fontWeight: "600",
-  color: "#fff",
-  textShadow: "0 1px 4px rgba(0,0,0,0.8)",
-  backgroundColor: "rgba(0,0,0,0.4)",
-  padding: "2px 8px",
-  borderRadius: "4px",
-  zIndex: 4,
-};
-
-// ─── Chat panel (управляется LiveKit LayoutContext) ───────────────────────────
+// ─── Chat panel ───────────────────────────────────────────────────────────────
 function ChatPanel() {
   const ctx = useMaybeLayoutContext();
   const isOpen = ctx?.widget?.state?.showChat ?? false;
-
   if (!isOpen) return null;
-
   return (
     <div
       style={{
@@ -75,11 +58,10 @@ function ChatPanel() {
   );
 }
 
-// ─── Один тайл: принимает trackRef напрямую, без GridLayout ──────────────────
+// ─── Один тайл участника ──────────────────────────────────────────────────────
 function AvatarTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) {
   const { participant } = trackRef;
   const isScreenShare = trackRef.source === Track.Source.ScreenShare;
-  // isTrackReference = publication существует (камера опубликована)
   const hasVideo =
     isTrackReference(trackRef) && !trackRef.publication.isMuted;
 
@@ -90,7 +72,7 @@ function AvatarTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) {
   });
 
   useEffect(() => {
-    // 1. Берём из metadata токена (мгновенно, без запроса)
+    // 1. Из metadata токена
     try {
       const meta = participant.metadata
         ? JSON.parse(participant.metadata)
@@ -104,7 +86,7 @@ function AvatarTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) {
       }
     } catch {}
 
-    // 2. Тянем banner_url из /api/profile (только для реальных UUID, не placeholder)
+    // 2. Из /api/profile — только для UUID
     const isUUID =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         participant.identity
@@ -128,59 +110,60 @@ function AvatarTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) {
     }
   }, [participant.identity, participant.metadata]);
 
-  // ── Демонстрация экрана (16:9, без квадрата) ──────────────────────────────
+  // Базовая обёртка — заполняет grid-ячейку целиком
+  const wrapperStyle: React.CSSProperties = {
+    position: "relative",
+    width: "100%",
+    height: "100%",
+    minHeight: 0,
+    borderRadius: "12px",
+    overflow: "hidden",
+    backgroundColor: "#1a1a1a",
+  };
+
+  const nameTag: React.CSSProperties = {
+    position: "absolute",
+    bottom: "10px",
+    left: "10px",
+    zIndex: 4,
+    fontSize: "12px",
+    fontWeight: "600",
+    color: "#fff",
+    textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+    backgroundColor: "rgba(0,0,0,0.4)",
+    padding: "2px 8px",
+    borderRadius: "4px",
+  };
+
+  // ── Демонстрация экрана ───────────────────────────────────────────────────
   if (isScreenShare && hasVideo) {
     return (
-      <div
-        style={{
-          borderRadius: "12px",
-          overflow: "hidden",
-          aspectRatio: "16/9",
-          position: "relative",
-          backgroundColor: "#000",
-        }}
-      >
+      <div style={wrapperStyle}>
         <VideoTrack
           trackRef={trackRef as TrackReference}
           style={{ width: "100%", height: "100%", objectFit: "contain" }}
         />
-        <span style={nameTagStyle}>{info.display_name}</span>
+        <span style={nameTag}>{info.display_name}</span>
       </div>
     );
   }
 
-  // ── Камера ВКЛЮЧЕНА → квадратный видео-тайл ───────────────────────────────
+  // ── Камера ВКЛЮЧЕНА ───────────────────────────────────────────────────────
   if (hasVideo) {
     return (
-      <div
-        style={{
-          borderRadius: "12px",
-          overflow: "hidden",
-          aspectRatio: "1 / 1",
-          position: "relative",
-          backgroundColor: "#000",
-        }}
-      >
+      <div style={wrapperStyle}>
         <VideoTrack
           trackRef={trackRef as TrackReference}
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
         />
-        <span style={nameTagStyle}>{info.display_name}</span>
+        <span style={nameTag}>{info.display_name}</span>
       </div>
     );
   }
 
-  // ── Камера ВЫКЛЮЧЕНА → баннер как фон + аватар по центру (квадрат) ────────
+  // ── Камера ВЫКЛЮЧЕНА → баннер + аватар ───────────────────────────────────
   return (
-    <div
-      style={{
-        borderRadius: "12px",
-        overflow: "hidden",
-        aspectRatio: "1 / 1",
-        position: "relative",
-        backgroundColor: "#1a1a1a",
-      }}
-    >
+    <div style={wrapperStyle}>
       {/* Баннер-фон */}
       {info.banner_url ? (
         <div
@@ -204,7 +187,7 @@ function AvatarTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) {
         />
       )}
 
-      {/* Затемняющий оверлей */}
+      {/* Оверлей */}
       <div
         style={{
           position: "absolute",
@@ -213,7 +196,7 @@ function AvatarTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) {
         }}
       />
 
-      {/* Аватар по центру */}
+      {/* Аватар */}
       <div
         style={{
           position: "absolute",
@@ -260,8 +243,7 @@ function AvatarTile({ trackRef }: { trackRef: TrackReferenceOrPlaceholder }) {
         )}
       </div>
 
-      {/* Имя участника */}
-      <span style={nameTagStyle}>{info.display_name}</span>
+      <span style={nameTag}>{info.display_name}</span>
     </div>
   );
 }
@@ -276,18 +258,14 @@ function CallLayout({ onLeave }: { onLeave: () => void }) {
     { onlySubscribed: false }
   );
 
-  const cols =
-    tracks.length <= 1 ? 1 : tracks.length <= 4 ? 2 : 3;
+  const count = tracks.length || 1;
+  const cols = count <= 1 ? 1 : count <= 4 ? 2 : 3;
+  const rows = Math.ceil(count / cols);
 
   return (
     <LayoutContextProvider>
-      <div
-        style={{
-          display: "flex",
-          height: "100%",
-          overflow: "hidden",
-        }}
-      >
+      <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+
         {/* Основная колонка */}
         <div
           style={{
@@ -298,19 +276,23 @@ function CallLayout({ onLeave }: { onLeave: () => void }) {
             overflow: "hidden",
           }}
         >
-          {/* Сетка тайлов */}
+          {/* Сетка тайлов — занимает весь доступный flex-пространство */}
           <div
             style={{
               flex: 1,
-              overflow: "auto",
+              minHeight: 0,         // ключевое: позволяет flex-child не расти бесконечно
               padding: "8px",
+              boxSizing: "border-box",
             }}
           >
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                gridTemplateRows: `repeat(${rows}, 1fr)`,
                 gap: "8px",
+                width: "100%",
+                height: "100%",
               }}
             >
               {tracks.map((trackRef, i) => (
@@ -334,14 +316,14 @@ function CallLayout({ onLeave }: { onLeave: () => void }) {
           />
         </div>
 
-        {/* Чат (открывается кнопкой Chat) */}
+        {/* Чат */}
         <ChatPanel />
       </div>
     </LayoutContextProvider>
   );
 }
 
-// ─── CallRoom (основной экспорт) ──────────────────────────────────────────────
+// ─── CallRoom ─────────────────────────────────────────────────────────────────
 export function CallRoom({ roomName, onLeave }: CallRoomProps) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -395,7 +377,7 @@ export function CallRoom({ roomName, onLeave }: CallRoomProps) {
   );
 }
 
-// ─── Minimal audio-only variant — не трогаем ──────────────────────────────────
+// ─── Audio-only variant — не трогаем ─────────────────────────────────────────
 export function AudioCall({
   roomName,
   onLeave,
