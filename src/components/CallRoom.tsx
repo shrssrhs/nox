@@ -13,12 +13,13 @@ import {
   LayoutContextProvider,
   useMaybeLayoutContext,
   isTrackReference,
+  useRoomContext,
 } from "@livekit/components-react";
 import type {
   TrackReferenceOrPlaceholder,
   TrackReference,
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { Track, RoomEvent } from "livekit-client";
 import { useEffect, useRef, useState } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,6 +30,25 @@ interface CallRoomProps {
   isFloating?: boolean;
   onMinimizeToggle: () => void;
   onLeave: () => void;
+  onCountChange?: (count: number) => void;
+}
+
+function playJoinSound() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.value = 660;
+    osc.frequency.linearRampToValueAtTime(880, ctx.currentTime + 0.12);
+    gain.gain.value = 0.18;
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.45);
+    setTimeout(() => ctx.close(), 1000);
+  } catch {}
 }
 
 interface ParticipantInfo {
@@ -385,10 +405,19 @@ function ChatPanel() {
 function CallLayout({
   onLeave,
   isFloating = false,
+  onCountChange,
 }: {
   onLeave: () => void;
   isFloating?: boolean;
+  onCountChange?: (count: number) => void;
 }) {
+  const room = useRoomContext();
+
+  useEffect(() => {
+    room.on(RoomEvent.ParticipantConnected, playJoinSound);
+    return () => { room.off(RoomEvent.ParticipantConnected, playJoinSound); };
+  }, [room]);
+
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -404,6 +433,10 @@ function CallLayout({
     (t) => t.source === Track.Source.Camera
   );
   const hasScreenShare = screenShareTracks.length > 0;
+
+  useEffect(() => {
+    onCountChange?.(cameraTracks.length);
+  }, [cameraTracks.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Compact floating view ─────────────────────────────────────────────────
   if (isFloating) {
@@ -587,6 +620,7 @@ export function CallRoom({
   roomName,
   isFloating = false,
   onLeave,
+  onCountChange,
 }: CallRoomProps) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -634,7 +668,7 @@ export function CallRoom({
       data-lk-theme="default"
       style={{ height: "100%" }}
     >
-      <CallLayout onLeave={onLeave} isFloating={isFloating} />
+      <CallLayout onLeave={onLeave} isFloating={isFloating} onCountChange={onCountChange} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );

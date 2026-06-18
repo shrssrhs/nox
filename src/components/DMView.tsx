@@ -5,7 +5,7 @@ import { useDMMessages } from "@/hooks/useDMs";
 import type { DMMessage } from "@/hooks/useDMs";
 import { createClient } from "@/lib/supabase/client";
 import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
-import { FEmoji, statusEmoji } from "@/components/FEmoji";
+import { FEmoji, StatusDot, statusEmoji } from "@/components/FEmoji";
 
 const REPLY_RE = /^«R»(.+?)»(.+?)«end»\n?/;
 
@@ -55,8 +55,14 @@ function Bubble({
 
   useEffect(() => {
     const close = () => setMenuVisible(false);
-    if (menuVisible) window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
+    if (menuVisible) {
+      window.addEventListener("click", close);
+      window.addEventListener("contextmenu", close);
+    }
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close);
+    };
   }, [menuVisible]);
 
   const handleCopy = async () => {
@@ -236,7 +242,7 @@ export function DMView({ conversationId, userId, otherUser }: Props) {
         <div className="relative">
           <Avatar name={otherUser.display_name} url={otherUser.avatar_url}/>
           <span className="absolute -bottom-0.5 -right-0.5">
-            <FEmoji emoji={statusEmoji(otherUser.status)} size={12} />
+            <StatusDot status={otherUser.status} size={11} />
           </span>
         </div>
         <div>

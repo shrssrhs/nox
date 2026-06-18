@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { FEmoji, statusEmoji as getStatusEmoji } from "@/components/FEmoji";
+import { FEmoji, StatusDot } from "@/components/FEmoji";
 
 const supabase = createClient();
 
@@ -193,7 +193,7 @@ export function ProfileModal({ userId, onClose, onUpdate }: ProfileModalProps) {
                   </div>
                   {/* Status dot */}
                   <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#111113]">
-                    <FEmoji emoji={getStatusEmoji(status)} size={13} />
+                    <StatusDot status={status} size={12} />
                   </span>
                 </div>
                 <input ref={avatarRef} type="file" accept="image/*" className="hidden" onChange={handleAvatar}/>

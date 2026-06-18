@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { FEmoji, statusEmoji } from "@/components/FEmoji";
+import { FEmoji, StatusDot } from "@/components/FEmoji";
 
 const supabase = createClient();
 
@@ -140,7 +140,7 @@ export function DMProfilePanel({ userId }: Props) {
               Status
             </p>
             <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white/70">
-              <FEmoji emoji={statusEmoji(profile.status)} size={13} />
+              <StatusDot status={profile.status} size={10} />
               <span>{statusText}</span>
             </div>
           </div>

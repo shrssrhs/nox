@@ -15,7 +15,7 @@ import type { Conversation } from "@/hooks/useDMs";
 import { ChannelModal } from "@/components/ChannelModal";
 import { DMProfilePanel } from "@/components/DMProfilePanel";
 import { UserPreviewModal } from "@/components/UserPreviewModal";
-import { FEmoji, statusEmoji } from "@/components/FEmoji";
+import { FEmoji, StatusDot, statusEmoji } from "@/components/FEmoji";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Channel {
@@ -88,6 +88,7 @@ function Avatar({ name, url, size = 8 }: { name: string | null; url?: string | n
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
 const REPLY_RE = /^«R»(.+?)»(.+?)«end»\n?/;
+const CAP_RE   = /^«CAP»(.+?)«end»\n?/;
 
 function MessageBubble({
   msg, isOwn, isPinned, onReply, onPin, onEdit, onDelete,
@@ -106,7 +107,10 @@ function MessageBubble({
   const replyMatch = msg.content.match(REPLY_RE);
   const replyAuthor = replyMatch?.[1];
   const replyPreview = replyMatch?.[2];
-  const text = replyMatch ? msg.content.replace(REPLY_RE, "") : msg.content;
+  const afterReply = replyMatch ? msg.content.replace(REPLY_RE, "") : msg.content;
+  const capMatch = afterReply.match(CAP_RE);
+  const caption = capMatch?.[1];
+  const text = capMatch ? afterReply.replace(CAP_RE, "") : afterReply;
 
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
@@ -128,8 +132,14 @@ function MessageBubble({
 
   useEffect(() => {
     const close = () => setMenuVisible(false);
-    if (menuVisible) window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
+    if (menuVisible) {
+      window.addEventListener("click", close);
+      window.addEventListener("contextmenu", close);
+    }
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close);
+    };
   }, [menuVisible]);
 
   const handleCopy = async () => {
@@ -227,15 +237,21 @@ function MessageBubble({
               </div>
             </div>
           ) : isImage ? (
-            <img
-              src={text}
-              alt="Shared media"
-              onClick={() => setPreviewUrl(text)}
-              className="max-w-xs md:max-w-md max-h-72 rounded-xl object-contain border border-white/10 bg-black/20 cursor-zoom-in"
-              loading="lazy"
-            />
+            <div className="flex flex-col gap-1.5">
+              <img
+                src={text}
+                alt="Shared media"
+                onClick={() => setPreviewUrl(text)}
+                className="max-w-xs md:max-w-md max-h-72 rounded-xl object-contain border border-white/10 bg-black/20 cursor-zoom-in"
+                loading="lazy"
+              />
+              {caption && <p className="text-sm text-white/70 px-1">{caption}</p>}
+            </div>
           ) : isVideo ? (
-            <video src={text} controls className="max-w-xs md:max-w-md max-h-72 rounded-xl border border-white/10 bg-black/20"/>
+            <div className="flex flex-col gap-1.5">
+              <video src={text} controls className="max-w-xs md:max-w-md max-h-72 rounded-xl border border-white/10 bg-black/20"/>
+              {caption && <p className="text-sm text-white/70 px-1">{caption}</p>}
+            </div>
           ) : isCodeFile ? (
             <button
               onClick={() => setPreviewUrl(text)}
@@ -394,7 +410,7 @@ function MemberList({ channelId, myId, onDM }: MemberListProps) {
                   </div>
               }
               <span className="absolute -bottom-0.5 -right-0.5">
-                <FEmoji emoji={statusEmoji(m.status)} size={11} />
+                <StatusDot status={m.status} size={10} />
               </span>
             </div>
             <span className="flex-1 truncate text-xs text-white/60 group-hover:text-white/80 flex items-center gap-1">
@@ -551,45 +567,13 @@ export function AppLayout() {
     return () => window.removeEventListener('paste', handlePaste);
   }, [activeChannel, uploadingFile]); // хук обновится при смене канала
 
-  const handleFileUpload = async (eOrFile: React.ChangeEvent<HTMLInputElement> | File) => {
-    let file: File | null = null;
-  
-    if (eOrFile instanceof File) {
-      file = eOrFile;
-    } else {
-      file = eOrFile.target.files?.[0] || null;
-    }
-  
+  const handleFileUpload = (eOrFile: React.ChangeEvent<HTMLInputElement> | File) => {
+    const file = eOrFile instanceof File ? eOrFile : (eOrFile.target.files?.[0] ?? null);
     if (!file || !activeChannel?.id) return;
-  
-    try {
-      setUploadingFile(true);
-  
-      const fileExt = file.name.split('.').pop() || 'png';
-      // Если имя файла дефолтное из буфера (image.png), делаем его уникальным
-      const baseName = file.name.startsWith('image') ? 'clipboard' : file.name.split('-')[0];
-      const fileName = `${baseName}-${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-      const filePath = `${activeChannel.id}/${fileName}`;
-  
-      const { data, error } = await supabase.storage
-        .from("attachments")
-        .upload(filePath, file);
-  
-      if (error) throw error;
-  
-      const { data: { publicUrl } } = supabase.storage
-        .from("attachments")
-        .getPublicUrl(filePath);
-  
-      await sendMessage(publicUrl);
-  
-    } catch (error) {
-      console.error("Error uploading file:", error);
-      alert("Failed to upload file");
-    } finally {
-      setUploadingFile(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    setComposeFile(file);
+    setComposeCaption("");
+    setComposeObjUrl(URL.createObjectURL(file));
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // Reply
@@ -666,11 +650,41 @@ export function AppLayout() {
     [handleSend]
   );
 
+  // Compose overlay (file + caption before send)
+  const [composeFile, setComposeFile]       = useState<File | null>(null);
+  const [composeCaption, setComposeCaption] = useState("");
+  const [composeObjUrl, setComposeObjUrl]   = useState<string | null>(null);
+
+  const handleComposeSend = useCallback(async () => {
+    if (!composeFile || !activeChannel?.id) return;
+    try {
+      setUploadingFile(true);
+      const ext  = composeFile.name.split(".").pop() || "bin";
+      const base = composeFile.name.startsWith("image") ? "clipboard" : composeFile.name.split("-")[0];
+      const path = `${activeChannel.id}/${base}-${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("attachments").upload(path, composeFile);
+      if (error) throw error;
+      const { data: { publicUrl } } = supabase.storage.from("attachments").getPublicUrl(path);
+      const content = composeCaption.trim()
+        ? `«CAP»${composeCaption.trim()}«end»\n${publicUrl}`
+        : publicUrl;
+      await sendMessage(content);
+    } catch (e) { console.error(e); }
+    finally {
+      setUploadingFile(false);
+      if (composeObjUrl) URL.revokeObjectURL(composeObjUrl);
+      setComposeFile(null);
+      setComposeCaption("");
+      setComposeObjUrl(null);
+    }
+  }, [composeFile, composeCaption, composeObjUrl, activeChannel, supabase, sendMessage]);
+
   // Call
   const [callActive, setCallActive] = useState(false);
   const [callRoomName, setCallRoomName] = useState("");
   const [callChannelId, setCallChannelId] = useState("");
   const [callChannelName, setCallChannelName] = useState("");
+  const [callParticipantCount, setCallParticipantCount] = useState(0);
 
   // Inline = viewing the channel where the call is; Floating = everywhere else
   const callIsInline =
@@ -767,7 +781,7 @@ export function AppLayout() {
                       </div>
                   }
                   <span className="absolute -bottom-0.5 -right-0.5">
-                    <FEmoji emoji={statusEmoji(conv.other_user.status)} size={10} />
+                    <StatusDot status={conv.other_user.status} size={9} />
                   </span>
                 </div>
                 <span className="truncate flex-1">{conv.other_user.display_name ?? "Unknown"}</span>
@@ -806,7 +820,7 @@ export function AppLayout() {
             <div className="relative">
               <Avatar name={profile?.display_name ?? null} url={profile?.avatar_url} size={8} />
               <span className="absolute -bottom-0.5 -right-0.5">
-                <FEmoji emoji={statusEmoji(profile?.status)} size={12} />
+                <StatusDot status={profile?.status} size={11} />
               </span>
             </div>
             <div className="min-w-0 flex-1 text-left">
@@ -893,6 +907,11 @@ export function AppLayout() {
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                   </svg>
                   Call
+                  {callParticipantCount > 0 && !callActive && (
+                    <span className="ml-0.5 rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-bold text-white/70">
+                      {callParticipantCount}
+                    </span>
+                  )}
                 </>
               )}
             </button>
@@ -1012,11 +1031,13 @@ export function AppLayout() {
                 isMinimized={false}
                 isFloating={callIsFloating}
                 onMinimizeToggle={() => {}}
+                onCountChange={setCallParticipantCount}
                 onLeave={() => {
                   setCallActive(false);
                   setCallRoomName("");
                   setCallChannelId("");
                   setCallChannelName("");
+                  setCallParticipantCount(0);
                 }}
               />
             </div>
@@ -1165,6 +1186,54 @@ export function AppLayout() {
         )}
       </aside>
       </>
+      )}
+
+      {/* ── COMPOSE OVERLAY ──────────────────────────────────────────────── */}
+      {composeFile && composeObjUrl && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="flex w-full max-w-lg flex-col gap-3 rounded-2xl border border-white/10 bg-[#111113] p-4 shadow-2xl">
+            {/* Preview */}
+            {composeFile.type.startsWith("image/") ? (
+              <img
+                src={composeObjUrl}
+                alt="preview"
+                className="max-h-64 w-full rounded-xl object-contain bg-black/30"
+              />
+            ) : composeFile.type.startsWith("video/") ? (
+              <video src={composeObjUrl} controls className="max-h-48 w-full rounded-xl bg-black/30"/>
+            ) : (
+              <div className="flex items-center gap-3 rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+                <span className="text-xl">📎</span>
+                <p className="text-sm text-white/60 truncate">{composeFile.name}</p>
+              </div>
+            )}
+            {/* Caption input */}
+            <input
+              value={composeCaption}
+              onChange={(e) => setComposeCaption(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleComposeSend(); }}
+              placeholder="Add a caption… (optional)"
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-white/20"
+              autoFocus
+            />
+            {/* Actions */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => { if (composeObjUrl) URL.revokeObjectURL(composeObjUrl); setComposeFile(null); setComposeCaption(""); setComposeObjUrl(null); }}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm text-white/50 hover:bg-white/10 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleComposeSend}
+                disabled={uploadingFile}
+                className="flex-1 rounded-xl bg-white/10 py-2.5 text-sm text-white hover:bg-white/15 disabled:opacity-40 transition-colors font-medium"
+              >
+                {uploadingFile ? "Uploading…" : "Send"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {previewUser && (

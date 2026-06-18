@@ -43,6 +43,49 @@ const MAP: Record<string, [string, string]> = {
   "🔗": ["Link", "link"],
 };
 
+// CSS dot for small status indicators on avatars (10-14px range)
+const STATUS_DOT_COLORS: Record<string, string> = {
+  "🟢": "#22c55e",
+  "🔴": "#ef4444",
+  "🟡": "#eab308",
+  "🟠": "#f97316",
+  "🔵": "#3b82f6",
+  "⚫": "#6b7280",
+  "⚪": "#9ca3af",
+  "🌙": "#8b5cf6",
+  "😴": "#8b5cf6",
+  "👻": "#6b7280",
+  "📵": "#6b7280",
+  "🔕": "#8b5cf6",
+  "🤒": "#f97316",
+  "🏖️": "#f59e0b",
+  "🎯": "#3b82f6",
+  "💪": "#22c55e",
+  "🚀": "#3b82f6",
+  "🎮": "#8b5cf6",
+  "☕": "#f59e0b",
+  "🍕": "#f97316",
+  "🤫": "#6b7280",
+};
+
+export function StatusDot({ status, size = 10 }: { status: string | null | undefined; size?: number }) {
+  const emoji = statusEmoji(status);
+  const color = STATUS_DOT_COLORS[emoji] ?? "#22c55e";
+  return (
+    <span
+      style={{
+        display: "block",
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        backgroundColor: color,
+        flexShrink: 0,
+        border: "1.5px solid rgba(0,0,0,0.4)",
+      }}
+    />
+  );
+}
+
 interface FEmojiProps {
   emoji: string;
   size?: number;
