@@ -8,12 +8,18 @@ import {
   LiveKitRoom,
   RoomAudioRenderer,
   ControlBar,
+  GridLayout,
+  Chat,
+  ParticipantTile,
   useTracks,
-  useParticipants,
+  useTrackRefContext,
+  LayoutContextProvider,
+  useMaybeLayoutContext,
 } from "@livekit/components-react";
-import { Track, Participant } from "livekit-client";
+import { Track } from "livekit-client";
 import { useEffect, useState } from "react";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface CallRoomProps {
   channelId: string;
   roomName: string;
@@ -22,15 +28,40 @@ interface CallRoomProps {
   onLeave: () => void;
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface ParticipantInfo {
   avatar_url: string | null;
   banner_url: string | null;
   display_name: string;
 }
 
-// ─── Single participant tile with avatar + banner ─────────────────────────────
-function AvatarTile({ participant }: { participant: Participant }) {
+// ─── Chat panel (видимость управляется LiveKit LayoutContext) ─────────────────
+function ChatPanel() {
+  const ctx = useMaybeLayoutContext();
+  const isOpen = ctx?.widget?.state?.showChat ?? false;
+  if (!isOpen) return null;
+
+  return (
+    <div
+      style={{
+        width: "320px",
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        borderLeft: "1px solid rgba(255,255,255,0.08)",
+        backgroundColor: "var(--lk-bg2, #111827)",
+        overflow: "hidden",
+      }}
+    >
+      <Chat />
+    </div>
+  );
+}
+
+// ─── Один тайл участника: аватар+баннер или видео ────────────────────────────
+function AvatarTile() {
+  const trackRef = useTrackRefContext();
+  const { participant } = trackRef;
+
   const [info, setInfo] = useState<ParticipantInfo>({
     avatar_url: null,
     banner_url: null,
@@ -38,7 +69,7 @@ function AvatarTile({ participant }: { participant: Participant }) {
   });
 
   useEffect(() => {
-    // 1. Сначала берём данные из metadata токена (без лишнего запроса)
+    // 1. Сразу берём из metadata токена (без запроса)
     try {
       const meta = participant.metadata
         ? JSON.parse(participant.metadata)
@@ -52,7 +83,7 @@ function AvatarTile({ participant }: { participant: Participant }) {
       }
     } catch {}
 
-    // 2. Дополнительно тянем banner_url через API (identity = UUID)
+    // 2. Тянем banner_url из /api/profile (identity = UUID)
     fetch(`/api/profile?id=${participant.identity}`)
       .then((r) => r.json())
       .then((profile) => {
@@ -70,106 +101,203 @@ function AvatarTile({ participant }: { participant: Participant }) {
       .catch(() => {});
   }, [participant.identity, participant.metadata]);
 
-  // Проверяем, включена ли камера у участника
-  const cameraTracks = useTracks(
-    [{ source: Track.Source.Camera, withPlaceholder: true }],
-    { onlySubscribed: false }
-  ).filter((t) => t.participant.identity === participant.identity);
+  const isScreenShare = trackRef.source === Track.Source.ScreenShare;
+  // publication === undefined означает placeholder (камера выключена)
+  const hasVideo = !!trackRef.publication && !trackRef.publication.isMuted;
 
-  const isCameraOn =
-    cameraTracks.length > 0 &&
-    cameraTracks[0].publication?.isMuted === false;
-
-  // Если камера включена — просто рендерим стандартный видео-тайл
-  if (isCameraOn) {
+  // ── Демонстрация экрана → стандартный тайл, без квадратного ограничения ──
+  if (isScreenShare) {
     return (
-      <div style={styles.tileWrapper}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <video
-          ref={(el) => {
-            if (el && cameraTracks[0]?.publication?.track) {
-              cameraTracks[0].publication.track.attach(el);
-            }
-          }}
-          autoPlay
-          playsInline
-          muted={participant.isLocal}
-          style={styles.video}
-        />
-        <span style={styles.nameTag}>{info.display_name}</span>
+      <div style={{ borderRadius: "12px", overflow: "hidden", width: "100%", height: "100%" }}>
+        <ParticipantTile style={{ width: "100%", height: "100%" }} />
       </div>
     );
   }
 
-  // Камера выключена — показываем баннер + аватар
+  // ── Камера ВКЛЮЧЕНА → квадратный видео-тайл ──────────────────────────────
+  if (hasVideo) {
+    return (
+      <div style={{ position: "relative", width: "100%", paddingBottom: "100%", borderRadius: "12px", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0 }}>
+          <ParticipantTile style={{ width: "100%", height: "100%" }} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Камера ВЫКЛЮЧЕНА → баннер как фон + аватар по центру (квадрат) ────────
   return (
-    <div style={styles.tileWrapper}>
-      {/* Баннер как фон */}
-      {info.banner_url ? (
-        <div
-          style={{
-            ...styles.banner,
-            backgroundImage: `url(${info.banner_url})`,
-          }}
-        />
-      ) : (
-        <div style={styles.bannerFallback} />
-      )}
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        paddingBottom: "100%",
+        borderRadius: "12px",
+        overflow: "hidden",
+        backgroundColor: "#1a1a1a",
+      }}
+    >
+      <div style={{ position: "absolute", inset: 0 }}>
 
-      {/* Затемняющий оверлей поверх баннера */}
-      <div style={styles.overlay} />
-
-      {/* Аватар по центру */}
-      <div style={styles.avatarWrapper}>
-        {info.avatar_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={info.avatar_url}
-            alt={info.display_name}
-            style={styles.avatar}
+        {/* Баннер-фон */}
+        {info.banner_url ? (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage: `url(${info.banner_url})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              filter: "blur(2px) brightness(0.6)",
+              transform: "scale(1.05)",
+            }}
           />
         ) : (
-          <div style={styles.avatarFallback}>
-            {info.display_name.charAt(0).toUpperCase()}
-          </div>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(135deg, #2a2a3a 0%, #1a1a2e 100%)",
+            }}
+          />
         )}
-      </div>
 
-      {/* Имя участника */}
-      <span style={styles.nameTag}>{info.display_name}</span>
+        {/* Затемняющий оверлей */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.35)",
+          }}
+        />
+
+        {/* Аватар по центру */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {info.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={info.avatar_url}
+              alt={info.display_name}
+              style={{
+                width: "72px",
+                height: "72px",
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "3px solid rgba(255,255,255,0.25)",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: "72px",
+                height: "72px",
+                borderRadius: "50%",
+                backgroundColor: "#5865F2",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "28px",
+                fontWeight: "700",
+                color: "#fff",
+                border: "3px solid rgba(255,255,255,0.25)",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+              }}
+            >
+              {info.display_name.charAt(0).toUpperCase()}
+            </div>
+          )}
+        </div>
+
+        {/* Имя участника */}
+        <span
+          style={{
+            position: "absolute",
+            bottom: "10px",
+            left: "10px",
+            zIndex: 3,
+            fontSize: "12px",
+            fontWeight: "600",
+            color: "#fff",
+            textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+            backgroundColor: "rgba(0,0,0,0.4)",
+            padding: "2px 8px",
+            borderRadius: "4px",
+          }}
+        >
+          {info.display_name}
+        </span>
+      </div>
     </div>
   );
 }
 
-// ─── Кастомная сетка участников ───────────────────────────────────────────────
-function ParticipantGrid() {
-  const participants = useParticipants();
-
-  const gridStyle: React.CSSProperties = {
-    display: "grid",
-    gridTemplateColumns:
-      participants.length === 1
-        ? "1fr"
-        : participants.length <= 4
-        ? "repeat(2, 1fr)"
-        : "repeat(3, 1fr)",
-    gap: "8px",
-    width: "100%",
-    height: "100%",
-    padding: "8px",
-    boxSizing: "border-box",
-  };
+// ─── Внутренний лейаут (должен быть внутри LiveKitRoom) ───────────────────────
+function CallLayout({ onLeave }: { onLeave: () => void }) {
+  // Камеры (с placeholder когда выкл.) + демонстрация экрана
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { onlySubscribed: false }
+  );
 
   return (
-    <div style={gridStyle}>
-      {participants.map((p) => (
-        <AvatarTile key={p.identity} participant={p} />
-      ))}
-    </div>
+    // LayoutContextProvider включает chat-toggle в ControlBar
+    <LayoutContextProvider>
+      <div
+        style={{
+          display: "flex",
+          height: "100%",
+          overflow: "hidden",
+        }}
+      >
+        {/* Основная колонка: сетка + кнопки */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ flex: 1, overflow: "auto" }}>
+            <GridLayout tracks={tracks} style={{ height: "100%" }}>
+              {/* Каждый тайл получает TrackRefContext от GridLayout */}
+              <AvatarTile />
+            </GridLayout>
+          </div>
+
+          {/* Панель управления — не трогаем функционал */}
+          <ControlBar
+            controls={{
+              microphone: true,
+              camera: true,
+              screenShare: true,
+              chat: true,   // кнопка чата, работает через LayoutContext
+              leave: true,
+            }}
+            onLeave={onLeave}
+          />
+        </div>
+
+        {/* Чат — показывается/скрывается через кнопку в ControlBar */}
+        <ChatPanel />
+      </div>
+    </LayoutContextProvider>
   );
 }
 
-// ─── CallRoom (основной компонент) ────────────────────────────────────────────
+// ─── CallRoom (основной экспорт) ──────────────────────────────────────────────
 export function CallRoom({ roomName, onLeave }: CallRoomProps) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -215,29 +343,15 @@ export function CallRoom({ roomName, onLeave }: CallRoomProps) {
       connect={true}
       onDisconnected={onLeave}
       data-lk-theme="default"
-      style={{ height: "100%", display: "flex", flexDirection: "column" }}
+      style={{ height: "100%" }}
     >
-      {/* Кастомная сетка с аватарами вместо VideoConference */}
-      <div style={{ flex: 1, overflow: "hidden" }}>
-        <ParticipantGrid />
-      </div>
-
-      {/* Панель управления — не трогаем */}
-      <ControlBar
-        controls={{
-          microphone: true,
-          screenShare: true,
-          leave: true,
-          camera: true,
-        }}
-      />
-
+      <CallLayout onLeave={onLeave} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );
 }
 
-// ─── Minimal audio-only variant (не трогаем) ──────────────────────────────────
+// ─── Minimal audio-only variant — не трогаем ──────────────────────────────────
 export function AudioCall({
   roomName,
   onLeave,
@@ -275,85 +389,3 @@ export function AudioCall({
     </LiveKitRoom>
   );
 }
-
-// ─── Стили ────────────────────────────────────────────────────────────────────
-const styles: Record<string, React.CSSProperties> = {
-  tileWrapper: {
-    position: "relative",
-    borderRadius: "12px",
-    overflow: "hidden",
-    backgroundColor: "#1a1a1a",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "160px",
-    width: "100%",
-    height: "100%",
-  },
-  banner: {
-    position: "absolute",
-    inset: 0,
-    backgroundSize: "cover",
-    backgroundPosition: "center",
-    filter: "blur(2px) brightness(0.6)",
-    transform: "scale(1.05)", // убирает белые края от blur
-  },
-  bannerFallback: {
-    position: "absolute",
-    inset: 0,
-    background: "linear-gradient(135deg, #2a2a3a 0%, #1a1a2e 100%)",
-  },
-  overlay: {
-    position: "absolute",
-    inset: 0,
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  avatarWrapper: {
-    position: "relative",
-    zIndex: 2,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: "8px",
-  },
-  avatar: {
-    width: "72px",
-    height: "72px",
-    borderRadius: "50%",
-    objectFit: "cover",
-    border: "3px solid rgba(255,255,255,0.25)",
-    boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-  },
-  avatarFallback: {
-    width: "72px",
-    height: "72px",
-    borderRadius: "50%",
-    backgroundColor: "#5865F2",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "28px",
-    fontWeight: "700",
-    color: "#fff",
-    border: "3px solid rgba(255,255,255,0.25)",
-    boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-  },
-  nameTag: {
-    position: "absolute",
-    bottom: "10px",
-    left: "10px",
-    zIndex: 3,
-    fontSize: "12px",
-    fontWeight: "600",
-    color: "#fff",
-    textShadow: "0 1px 4px rgba(0,0,0,0.8)",
-    backgroundColor: "rgba(0,0,0,0.4)",
-    padding: "2px 8px",
-    borderRadius: "4px",
-  },
-  video: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-  },
-};
