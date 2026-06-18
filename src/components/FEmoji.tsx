@@ -31,6 +31,7 @@ const MAP: Record<string, [string, string]> = {
   "💤": ["Zzz", "zzz"],
   "📵": ["No Mobile Phones", "no_mobile_phones"],
   "🤒": ["Face with Thermometer", "face_with_thermometer"],
+  "👻": ["Ghost", "ghost"],
 
   // UI icons
   "💬": ["Speech Balloon", "speech_balloon"],

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import { FEmoji, statusEmoji } from "@/components/FEmoji";
 
 // ─── Цвета кружков по роли ────────────────────────────────────────────────────
 const BADGE_CONFIG: Record<string, { label: string; color: string }> = {
@@ -73,7 +74,6 @@ export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
   }, [onClose]);
 
   const initials  = (user.display_name ?? "?").slice(0, 1).toUpperCase();
-  const emoji     = user.status?.split(" ")[0] ?? "🟢";
   const statusText = user.status?.split(" ").slice(1).join(" ") ?? "Online";
 
   return (
@@ -170,7 +170,7 @@ export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1">Status</p>
             <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white/70">
-              <span>{emoji}</span>
+              <FEmoji emoji={statusEmoji(user.status)} size={13} />
               <span>{statusText}</span>
             </div>
           </div>

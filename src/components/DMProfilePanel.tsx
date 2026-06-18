@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { FEmoji, statusEmoji } from "@/components/FEmoji";
 
 const supabase = createClient();
 
@@ -73,7 +74,6 @@ export function DMProfilePanel({ userId }: Props) {
   }
 
   const initials = (profile.display_name ?? "?").slice(0, 1).toUpperCase();
-  const emoji = profile.status?.split(" ")[0] ?? "🟢";
   const statusText = profile.status?.split(" ").slice(1).join(" ") ?? "Online";
   const badges = profile.badges ?? [];
   const topBadge = ROLE_PRIORITY.find((r) => badges.includes(r));
@@ -140,7 +140,7 @@ export function DMProfilePanel({ userId }: Props) {
               Status
             </p>
             <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-sm text-white/70">
-              <span>{emoji}</span>
+              <FEmoji emoji={statusEmoji(profile.status)} size={13} />
               <span>{statusText}</span>
             </div>
           </div>

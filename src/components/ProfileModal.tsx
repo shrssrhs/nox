@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { FEmoji, statusEmoji as getStatusEmoji } from "@/components/FEmoji";
 
 const supabase = createClient();
 
@@ -191,8 +192,8 @@ export function ProfileModal({ userId, onClose, onUpdate }: ProfileModalProps) {
                     {uploadingA ? <Spinner/> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>}
                   </div>
                   {/* Status dot */}
-                  <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#111113] text-[11px]">
-                    {statusEmoji}
+                  <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#111113]">
+                    <FEmoji emoji={getStatusEmoji(status)} size={13} />
                   </span>
                 </div>
                 <input ref={avatarRef} type="file" accept="image/*" className="hidden" onChange={handleAvatar}/>
@@ -272,7 +273,7 @@ export function ProfileModal({ userId, onClose, onUpdate }: ProfileModalProps) {
                             : "border-white/5 bg-white/5 text-white/40 hover:bg-white/10 hover:text-white"
                         }`}
                       >
-                        <span>{s.emoji}</span><span>{s.label}</span>
+                        <FEmoji emoji={s.emoji} size={14} /><span>{s.label}</span>
                       </button>
                     );
                   })}
