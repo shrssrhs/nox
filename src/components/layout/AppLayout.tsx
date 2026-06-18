@@ -84,17 +84,27 @@ function Avatar({ name, url, size = 8 }: { name: string | null; url?: string | n
 }
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
-function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
+const REPLY_RE = /^«R»(.+?)»(.+?)«end»\n?/;
+
+function MessageBubble({
+  msg, isOwn, isPinned, onReply, onPin,
+}: {
+  msg: Message; isOwn: boolean; isPinned: boolean;
+  onReply: (msg: Message) => void;
+  onPin: (msgId: string) => void;
+}) {
   const name = msg.profiles?.display_name ?? "Unknown";
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const badges = (msg.profiles as any)?.badges || [];
-  const text = msg.content;
 
-  // Стейты для контекстного меню
+  // Parse optional reply prefix
+  const replyMatch = msg.content.match(REPLY_RE);
+  const replyAuthor = replyMatch?.[1];
+  const replyPreview = replyMatch?.[2];
+  const text = replyMatch ? msg.content.replace(REPLY_RE, "") : msg.content;
+
   const [menuVisible, setMenuVisible] = useState(false);
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
-
-  // Стейты для редактирования
+  const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(text);
 
@@ -102,55 +112,51 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
   const isVideo = /\.(mp4|webm|ogg|mov)($|\?)/i.test(text);
   const isStorageFile = text.startsWith("http") && text.includes("/storage/v1/object/public/");
 
-  // Открытие кастомного меню по ПКМ
   const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault(); // Глушим дефолтное меню браузера
-    setMenuPosition({ x: e.clientX, y: e.clientY });
+    e.preventDefault();
+    setMenuPos({ x: e.clientX, y: e.clientY });
     setMenuVisible(true);
   };
 
-  // Закрытие меню при клике в любое другое место
   useEffect(() => {
-    const closeMenu = () => setMenuVisible(false);
-    if (menuVisible) {
-      window.addEventListener("click", closeMenu);
-    }
-    return () => window.removeEventListener("click", closeMenu);
+    const close = () => setMenuVisible(false);
+    if (menuVisible) window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
   }, [menuVisible]);
 
-  // Функции-заглушки для действий
-  const handleCopy = () => {
+  const handleCopy = async () => {
+    if (isImage) {
+      try {
+        const res = await fetch(text);
+        const blob = await res.blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        return;
+      } catch {}
+    }
     navigator.clipboard.writeText(text);
   };
 
-  const handleDelete = () => {
-    console.log("Удалить сообщение из Supabase:", msg.id);
-  };
-
-  const handleSaveEdit = () => {
-    console.log("Сохранить изменения в Supabase:", editValue);
-    setIsEditing(false);
-  };
+  const menuBtn = "w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors";
 
   return (
-    <div 
+    <div
       onContextMenu={handleContextMenu}
       className={`relative flex gap-3 select-none ${isOwn ? "flex-row-reverse" : ""}`}
     >
       <Avatar name={name} url={msg.profiles?.avatar_url} size={8} />
-      
+
       <div className={`flex max-w-[70%] flex-col gap-1 ${isOwn ? "items-end" : ""}`}>
+        {/* Header row */}
         <div className="flex items-baseline gap-2">
           {!isOwn && (
             <span className="text-xs font-medium text-white/70 flex items-center gap-1">
               {name}
               {(["owner","investor","admin","mod","verified"] as const)
-                .filter(r => badges.includes(r))
-                .slice(0, 1)
+                .filter(r => badges.includes(r)).slice(0, 1)
                 .map(r => {
                   const colors: Record<string, string> = {
                     owner: "#F59E0B", investor: "#8B5CF6", admin: "#EF4444",
-                    mod: "#3B82F6", verified: "#10B981"
+                    mod: "#3B82F6", verified: "#10B981",
                   };
                   return (
                     <svg key={r} width="13" height="13" viewBox="0 0 15 15" fill="none">
@@ -158,17 +164,34 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
                       <polyline points="3.8,7.5 6.2,10.2 11.2,4.8" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   );
-                })
-              }
+                })}
             </span>
           )}
           <span className="text-[11px] text-white/30">{time}</span>
+          {isPinned && <span className="text-[11px] text-white/25 select-none">·</span>}
+          {isPinned && (
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/25">
+              <line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>
+            </svg>
+          )}
         </div>
-        
+
+        {/* Reply quote */}
+        {replyAuthor && (
+          <div className={`flex items-start gap-1.5 max-w-full ${isOwn ? "flex-row-reverse" : ""}`}>
+            <div className="w-px self-stretch bg-white/20 rounded-full flex-shrink-0" />
+            <p className="text-[11px] text-white/35 truncate max-w-[220px]">
+              <span className="text-white/50 font-medium">{replyAuthor}</span>
+              {" "}{replyPreview}
+            </p>
+          </div>
+        )}
+
+        {/* Bubble */}
         <div
           className={`rounded-2xl text-sm leading-relaxed overflow-hidden ${
-            isImage || isVideo 
-              ? "bg-transparent p-0" 
+            isImage || isVideo
+              ? "bg-transparent p-0"
               : isOwn
                 ? "rounded-tr-sm bg-white/10 px-4 py-2.5 text-white"
                 : "rounded-tl-sm bg-white/5 px-4 py-2.5 text-white/90"
@@ -184,7 +207,7 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
               />
               <div className="flex justify-end gap-1.5 text-xs font-mono">
                 <button onClick={() => setIsEditing(false)} className="text-white/40 hover:text-white px-2 py-1">[cancel]</button>
-                <button onClick={handleSaveEdit} className="text-emerald-400 hover:text-emerald-300 px-2 py-1">[save]</button>
+                <button onClick={() => setIsEditing(false)} className="text-emerald-400 hover:text-emerald-300 px-2 py-1">[save]</button>
               </div>
             </div>
           ) : isImage ? (
@@ -207,52 +230,33 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
         </div>
       </div>
 
-      {/* ─── КАСТОМНОЕ КОНТЕКСТНОЕ МЕНЮ (ПКМ) ─── */}
+      {/* Context menu */}
       {menuVisible && (
         <div
-          className="fixed z-50 flex flex-col min-w-[120px] bg-[#0D0D0F] border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
-          style={{ top: menuPosition.y, left: menuPosition.x }}
-          onClick={(e) => e.stopPropagation()} // Чтобы клик внутри меню не закрывал его раньше времени
+          className="fixed z-50 flex flex-col min-w-[110px] bg-[#0D0D0F] border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
+          style={{ top: menuPos.y, left: menuPos.x }}
+          onClick={(e) => e.stopPropagation()}
         >
-          <button className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors">
-            [reply]
-          </button>
-          
+          <button onClick={() => { onReply(msg); setMenuVisible(false); }} className={menuBtn}>[reply]</button>
+
           {isOwn && !isImage && !isVideo && !isStorageFile && (
-            <button 
-              onClick={() => { setIsEditing(true); setMenuVisible(false); }}
-              className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors"
-            >
-              [edit]
-            </button>
-          )}
-          
-          <button className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors">
-            [pin]
-          </button>
-          
-          <button 
-            onClick={() => { handleCopy(); setMenuVisible(false); }}
-            className="w-full text-left font-mono text-xs text-white/50 hover:text-white hover:bg-white/5 rounded-lg px-3 py-1.5 transition-colors"
-          >
-            [copy]
-          </button>
-          
-          {isOwn && (
-            <div className="my-1 border-t border-white/5" /> // Тонкий разделитель перед удалением
+            <button onClick={() => { setIsEditing(true); setMenuVisible(false); }} className={menuBtn}>[edit]</button>
           )}
 
+          <button onClick={() => { onPin(msg.id); setMenuVisible(false); }} className={menuBtn}>
+            [{isPinned ? "unpin" : "pin"}]
+          </button>
+
+          <button onClick={() => { handleCopy(); setMenuVisible(false); }} className={menuBtn}>[copy]</button>
+
+          {isOwn && <div className="my-1 border-t border-white/5" />}
           {isOwn && (
-            <button 
-              onClick={() => { handleDelete(); setMenuVisible(false); }}
-              className="w-full text-left font-mono text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
-            >
+            <button className="w-full text-left font-mono text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors">
               [delete]
             </button>
           )}
         </div>
       )}
-
     </div>
   );
 }
@@ -487,6 +491,32 @@ export function AppLayout() {
     }
   };
 
+  // Reply
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+
+  // Pins (per-channel, localStorage)
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!activeChannel) { setPinnedIds(new Set()); return; }
+    try {
+      const stored: string[] = JSON.parse(localStorage.getItem(`pins:${activeChannel.id}`) || "[]");
+      setPinnedIds(new Set(stored));
+    } catch {
+      setPinnedIds(new Set());
+    }
+  }, [activeChannel?.id]);
+
+  const handlePin = useCallback((msgId: string) => {
+    if (!activeChannel) return;
+    setPinnedIds(prev => {
+      const next = new Set(prev);
+      next.has(msgId) ? next.delete(msgId) : next.add(msgId);
+      localStorage.setItem(`pins:${activeChannel.id}`, JSON.stringify([...next]));
+      return next;
+    });
+  }, [activeChannel]);
+
   // Input
   const [draft, setDraft] = useState("");
   const sending = useRef(false);
@@ -494,11 +524,17 @@ export function AppLayout() {
   const handleSend = useCallback(async () => {
     if (!draft.trim() || sending.current) return;
     sending.current = true;
-    const text = draft;
+    let content = draft.trim();
+    if (replyingTo) {
+      const author = replyingTo.profiles?.display_name ?? "Unknown";
+      const preview = replyingTo.content.replace(REPLY_RE, "").slice(0, 60).replace(/\n/g, " ");
+      content = `«R»${author}»${preview}«end»\n${content}`;
+      setReplyingTo(null);
+    }
     setDraft("");
-    await sendMessage(text);
+    await sendMessage(content);
     sending.current = false;
-  }, [draft, sendMessage]);
+  }, [draft, sendMessage, replyingTo]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -878,6 +914,9 @@ export function AppLayout() {
                   key={msg.id}
                   msg={msg}
                   isOwn={msg.sender_id === userId}
+                  isPinned={pinnedIds.has(msg.id)}
+                  onReply={setReplyingTo}
+                  onPin={handlePin}
                 />
               ))}
               <div ref={bottomRef} />
@@ -886,8 +925,21 @@ export function AppLayout() {
         </div>
 
         {/* Input */}
-        <div className="border-t border-white/10 p-4">
-          <div className="flex items-end gap-3">
+        <div className="border-t border-white/10">
+          {replyingTo && (
+            <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
+              <span className="text-[11px] text-white/40 truncate max-w-[80%]">
+                <span className="text-white/25 mr-1">↩</span>
+                <span className="text-white/55 font-medium">{replyingTo.profiles?.display_name}</span>
+                {" · "}{replyingTo.content.replace(REPLY_RE, "").slice(0, 60)}
+              </span>
+              <button
+                onClick={() => setReplyingTo(null)}
+                className="text-white/25 hover:text-white/60 text-xs ml-2 flex-shrink-0"
+              >✕</button>
+            </div>
+          )}
+          <div className="flex items-end gap-3 p-4">
                 
             <input 
               type="file" 
