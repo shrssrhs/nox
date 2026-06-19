@@ -26,3 +26,20 @@ body[data-font-size="lg"] .msg-text { font-size: 16px; }
 /* Compact mode */
 body.nox-compact .msg-row { padding-top: 2px; padding-bottom: 2px; }
 body.nox-compact .msg-gap { gap: 0.25rem; }
+
+/* Settings animations */
+@keyframes settings-in {
+  from { opacity: 0; transform: scale(0.98) translateY(6px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+@keyframes settings-nav-in {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0);     }
+}
+@keyframes section-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+.settings-panel   { animation: settings-in     0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.settings-nav     { animation: settings-nav-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.settings-section { animation: section-in      0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }

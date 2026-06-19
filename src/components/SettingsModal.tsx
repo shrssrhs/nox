@@ -147,7 +147,12 @@ async function uploadFile(bucket: string, path: string, file: File): Promise<str
 }
 
 // ─── Sections ─────────────────────────────────────────────────────────────────
-function ProfileSection({ userId, profile: initProfile, onUpdate }: { userId: string; profile: Profile | null; onUpdate: (p: Profile) => void }) {
+function ProfileSection({ userId, profile: initProfile, onUpdate, onProfileChange }: {
+  userId: string;
+  profile: Profile | null;
+  onUpdate: (p: Profile) => void;
+  onProfileChange: (p: Profile) => void;
+}) {
   const [name,       setName]       = useState(initProfile?.display_name ?? "");
   const [username,   setUsername]   = useState(initProfile?.username ?? "");
   const [bio,        setBio]        = useState(initProfile?.bio ?? "");
@@ -161,23 +166,21 @@ function ProfileSection({ userId, profile: initProfile, onUpdate }: { userId: st
   const avatarRef = useRef<HTMLInputElement>(null);
   const bannerRef = useRef<HTMLInputElement>(null);
 
-  // Always fetch the full profile from DB so username/bio/banner_url are available
+  // Sync form when cached profile arrives from parent (no extra DB call)
   useEffect(() => {
-    supabase
-      .from("profiles")
-      .select("display_name, avatar_url, banner_url, bio, status, username, email")
-      .eq("id", userId)
-      .single()
-      .then(({ data }) => {
-        if (!data) return;
-        const p = data as Profile;
-        setLocalProfile(p);
-        setName(p.display_name ?? "");
-        setUsername(p.username ?? "");
-        setBio(p.bio ?? "");
-        setStatus(p.status ?? "🟢 Online");
-      });
-  }, [userId]);
+    if (!initProfile) return;
+    setLocalProfile(initProfile);
+    setName(initProfile.display_name ?? "");
+    setUsername(initProfile.username ?? "");
+    setBio(initProfile.bio ?? "");
+    setStatus(initProfile.status ?? "🟢 Online");
+  }, [initProfile]);
+
+  function updateLocal(p: Profile) {
+    setLocalProfile(p);
+    onProfileChange(p);  // update parent cache
+    onUpdate(p);         // update sidebar
+  }
 
   async function handleAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]; if (!file) return;
@@ -185,8 +188,8 @@ function ProfileSection({ userId, profile: initProfile, onUpdate }: { userId: st
     const url = await uploadFile("avatars", `avatars/${userId}.${file.name.split(".").pop()}`, file);
     if (url) {
       await supabase.from("profiles").update({ avatar_url: url }).eq("id", userId);
-      setLocalProfile(p => p ? { ...p, avatar_url: url } : p);
-      onUpdate({ ...localProfile!, avatar_url: url });
+      const updated = { ...localProfile!, avatar_url: url };
+      updateLocal(updated);
     }
     setUploadingA(false);
   }
@@ -197,7 +200,7 @@ function ProfileSection({ userId, profile: initProfile, onUpdate }: { userId: st
     const url = await uploadFile("avatars", `banners/${userId}.${file.name.split(".").pop()}`, file);
     if (url) {
       await supabase.from("profiles").update({ banner_url: url }).eq("id", userId);
-      setLocalProfile(p => p ? { ...p, banner_url: url } : p);
+      updateLocal({ ...localProfile!, banner_url: url });
     }
     setUploadingB(false);
   }
@@ -209,7 +212,7 @@ function ProfileSection({ userId, profile: initProfile, onUpdate }: { userId: st
       .eq("id", userId)
       .select("display_name, avatar_url, banner_url, bio, status, username, email")
       .single();
-    if (data) { onUpdate(data as Profile); setSaved(true); setTimeout(() => setSaved(false), 2000); }
+    if (data) { updateLocal(data as Profile); setSaved(true); setTimeout(() => setSaved(false), 2000); }
     setSaving(false);
   }
 
@@ -461,13 +464,7 @@ function AudioVideoSection() {
   );
 }
 
-function AccountSection({ userId, onSignOut }: { userId: string; onSignOut: () => void }) {
-  const [email, setEmail] = useState<string | null>(null);
-  useEffect(() => {
-    supabase.from("profiles").select("email").eq("id", userId).single()
-      .then(({ data }) => setEmail(data?.email ?? null));
-  }, [userId]);
-
+function AccountSection({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
   return (
     <div className="space-y-3">
       <div className="rounded-xl border border-white/5 bg-white/3 overflow-hidden divide-y divide-white/5">
@@ -506,21 +503,42 @@ const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
 ];
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
-export function SettingsModal({ userId, profile, onClose, onUpdate }: Props) {
-  const [section, setSection] = useState<Section>("profile");
-  const [prefs, setPrefs] = useState<NoxPrefs>(loadPrefs);
+export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpdate }: Props) {
+  const [section,    setSection]    = useState<Section>("profile");
+  const [sectionKey, setSectionKey] = useState(0);
+  const [prefs,      setPrefs]      = useState<NoxPrefs>(loadPrefs);
+
+  // ── Single profile fetch on open — cached for the lifetime of the modal ──
+  const [fullProfile, setFullProfile] = useState<Profile | null>(null);
+  useEffect(() => {
+    supabase
+      .from("profiles")
+      .select("display_name, avatar_url, banner_url, bio, status, username, email")
+      .eq("id", userId)
+      .single()
+      .then(({ data }) => { if (data) setFullProfile(data as Profile); });
+  }, [userId]);
+
+  // Update cache when ProfileSection saves / uploads
+  function handleProfileChange(p: Profile) {
+    setFullProfile(p);
+  }
+
+  // Displayed profile in sidebar: use full profile once loaded, fall back to sidebar prop
+  const navProfile = fullProfile ?? sidebarProfile;
+
+  function changeSection(s: Section) {
+    setSection(s);
+    setSectionKey(k => k + 1); // triggers re-animation
+  }
 
   function handlePref<K extends keyof NoxPrefs>(key: K, val: NoxPrefs[K]) {
-    setPref(`nox_${key.replace(/([A-Z])/g, m => "_" + m.toLowerCase())}`, val);
+    // Convert camelCase key to snake_case for localStorage
+    const lsKey = "nox_" + key.replace(/([A-Z])/g, m => "_" + m.toLowerCase());
+    setPref(lsKey, val);
     setPrefs(p => ({ ...p, [key]: val }));
-
-    // Side effects
-    if (key === "compactMode") {
-      document.body.classList.toggle("nox-compact", val as boolean);
-    }
-    if (key === "fontSize") {
-      document.body.setAttribute("data-font-size", val as string);
-    }
+    if (key === "compactMode")  document.body.classList.toggle("nox-compact", val as boolean);
+    if (key === "fontSize")     document.body.setAttribute("data-font-size", val as string);
   }
 
   async function handleSignOut() {
@@ -531,26 +549,26 @@ export function SettingsModal({ userId, profile, onClose, onUpdate }: Props) {
   const sectionTitle = NAV.find(n => n.id === section)?.label ?? "";
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-black/70 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex bg-black/60 backdrop-blur-sm settings-panel">
       {/* ── Left nav ── */}
-      <div className="flex w-64 flex-col border-r border-white/10 bg-[#0D0D0F] py-6 flex-shrink-0">
+      <div className="flex w-64 flex-col border-r border-white/10 bg-[#0D0D0F] py-6 flex-shrink-0 settings-nav">
         {/* Profile card */}
         <div className="px-5 mb-6">
           <div className="flex items-center gap-3">
             <div className="relative flex-shrink-0">
-              {profile?.avatar_url
-                ? <img src={profile.avatar_url} className="h-12 w-12 rounded-full object-cover" alt=""/>
+              {navProfile?.avatar_url
+                ? <img src={navProfile.avatar_url} className="h-12 w-12 rounded-full object-cover" alt=""/>
                 : <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-lg font-semibold text-white/60">
-                    {(profile?.display_name ?? "?").slice(0,1).toUpperCase()}
+                    {(navProfile?.display_name ?? "?").slice(0,1).toUpperCase()}
                   </div>
               }
               <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#0D0D0F]">
-                <StatusDot status={profile?.status} size={10}/>
+                <StatusDot status={navProfile?.status} size={10}/>
               </span>
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-white">{profile?.display_name ?? "…"}</p>
-              <p className="text-xs text-white/30">{profile?.status?.split(" ").slice(1).join(" ") ?? "Online"}</p>
+              <p className="truncate text-sm font-semibold text-white">{navProfile?.display_name ?? "…"}</p>
+              <p className="text-xs text-white/30">{navProfile?.status?.split(" ").slice(1).join(" ") ?? "Online"}</p>
             </div>
           </div>
         </div>
@@ -562,14 +580,14 @@ export function SettingsModal({ userId, profile, onClose, onUpdate }: Props) {
           {NAV.map(item => (
             <button
               key={item.id}
-              onClick={() => setSection(item.id)}
-              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors text-left ${
+              onClick={() => changeSection(item.id)}
+              className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-150 text-left ${
                 section === item.id
                   ? "bg-white/10 text-white"
                   : "text-white/40 hover:bg-white/5 hover:text-white/70"
               }`}
             >
-              <span className="flex-shrink-0">{item.icon}</span>
+              <span className="flex-shrink-0 transition-opacity duration-150">{item.icon}</span>
               <span>{item.label}</span>
             </button>
           ))}
@@ -596,11 +614,16 @@ export function SettingsModal({ userId, profile, onClose, onUpdate }: Props) {
           <h2 className="text-base font-semibold text-white">{sectionTitle}</h2>
         </div>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-8 py-6 [&::-webkit-scrollbar]:hidden">
+        {/* Scrollable content — key triggers re-animation on section switch */}
+        <div key={sectionKey} className="flex-1 overflow-y-auto px-8 py-6 [&::-webkit-scrollbar]:hidden settings-section">
           <div className="max-w-lg">
             {section === "profile" && (
-              <ProfileSection userId={userId} profile={null} onUpdate={onUpdate}/>
+              <ProfileSection
+                userId={userId}
+                profile={fullProfile}
+                onUpdate={onUpdate}
+                onProfileChange={handleProfileChange}
+              />
             )}
             {section === "notifications" && (
               <NotificationsSection prefs={prefs} onChange={handlePref}/>
@@ -612,7 +635,7 @@ export function SettingsModal({ userId, profile, onClose, onUpdate }: Props) {
               <AudioVideoSection/>
             )}
             {section === "account" && (
-              <AccountSection userId={userId} onSignOut={handleSignOut}/>
+              <AccountSection email={fullProfile?.email ?? null} onSignOut={handleSignOut}/>
             )}
           </div>
         </div>
