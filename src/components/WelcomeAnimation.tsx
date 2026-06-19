@@ -120,11 +120,12 @@ function runParticles(canvas: HTMLCanvasElement, onDone: () => void) {
 // ─── Component ────────────────────────────────────────────────────────────────
 export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
   const already = typeof window !== "undefined" && !!localStorage.getItem("nox_welcome_seen");
-  const [gone,  setGone]  = useState(already);
-  const [phase, setPhase] = useState(0);         // 0-black 1-logo 2-tagline 3-features 4-outro 5-canvas
-  const [pills, setPills] = useState(0);         // how many feature pills visible
-  const [enjoy, setEnjoy] = useState(false);
-  const [fading, setFading] = useState(false);
+  const [gone,    setGone]    = useState(already);
+  const [started, setStarted] = useState(false);  // requires user tap to unlock AudioContext
+  const [phase,   setPhase]   = useState(0);
+  const [pills,   setPills]   = useState(0);
+  const [enjoy,   setEnjoy]   = useState(false);
+  const [fading,  setFading]  = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { whoosh, ding, chime } = useAudio();
 
@@ -137,31 +138,65 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
     }, 700);
   }, [onDone]);
 
+  // Start animation only after user gesture (needed to unlock AudioContext on all browsers)
+  const handleStart = useCallback(() => {
+    setStarted(true);
+  }, []);
+
   useEffect(() => {
-    if (gone) return;
+    if (gone || !started) return;
     const ts: ReturnType<typeof setTimeout>[] = [];
     const t = (ms: number, fn: () => void) => ts.push(setTimeout(fn, ms));
 
-    t(350,  () => { setPhase(1); whoosh(); });
-    t(1600, () => setPhase(2));
-    t(2600, () => { setPills(1); ding(349.23); });   // F4
-    t(3050, () => { setPills(2); ding(440);    });   // A4
-    t(3500, () => { setPills(3); ding(523.25); });   // C5
-    t(5200, () => { setPhase(4); whoosh(); });
-    t(5900, () => {
+    t(300,  () => { setPhase(1); whoosh(); });
+    t(1500, () => setPhase(2));
+    t(2500, () => { setPills(1); ding(349.23); });   // F4
+    t(2950, () => { setPills(2); ding(440);    });   // A4
+    t(3400, () => { setPills(3); ding(523.25); });   // C5
+    t(5100, () => { setPhase(4); whoosh(); });
+    t(5800, () => {
       setPhase(5);
       if (canvasRef.current) {
         runParticles(canvasRef.current, () => {});
       }
     });
-    t(6900, () => { setEnjoy(true); chime(); });
-    t(9200, () => finish());
+    t(6800, () => { setEnjoy(true); chime(); });
+    t(9100, () => finish());
 
     return () => ts.forEach(clearTimeout);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gone]);
+  }, [gone, started]);
 
   if (gone) return null;
+
+  // ── Tap-to-begin gate (unlocks AudioContext via user gesture) ─────────────
+  if (!started) {
+    return (
+      <div
+        onClick={handleStart}
+        className="fixed inset-0 z-[9999] flex cursor-pointer flex-col items-center justify-center gap-8 select-none"
+        style={{ background: "rgb(4, 4, 8)" }}
+      >
+        {/* Logo */}
+        <div
+          className="flex h-24 w-24 items-center justify-center rounded-[28px]"
+          style={{
+            background: "linear-gradient(145deg, #1e1b4b 0%, #3730a3 60%, #1e1b4b 100%)",
+            border: "1px solid rgba(167,139,250,0.2)",
+            boxShadow: "0 0 60px #7c3aed38",
+            animation: "nox-pulse-dot 2.5s ease-in-out infinite",
+          }}
+        >
+          <span className="text-5xl font-black text-white" style={{ fontFamily: "var(--font-geist-sans)" }}>N</span>
+        </div>
+
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-sm font-semibold text-white/70">Tap anywhere to begin</p>
+          <p className="text-xs text-white/25" style={{ letterSpacing: "0.2em" }}>NOX</p>
+        </div>
+      </div>
+    );
+  }
 
   const logoVisible  = phase >= 1 && phase < 4;
   const enjoyVisible = phase >= 5 && enjoy;

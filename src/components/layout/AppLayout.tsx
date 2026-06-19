@@ -775,40 +775,7 @@ export function AppLayout() {
           </button>
         </div>
 
-        {channelModalOpen && userId && (
-          <ChannelModal
-            userId={userId}
-            onClose={() => setChannelModalOpen(false)}
-            onJoin={(ch) => {
-              setChannels((prev) => {
-                const exists = prev.find((c) => c.id === ch.id);
-                if (exists) return prev;
-                return [...prev, ch];
-              });
-              setActiveChannel(ch);
-              setActiveConv(null);
-              setView("channel");
-            }}
-          />
-        )}
-
-        {channelSettingsOpen && activeChannel && userId && (
-          <ChannelSettingsModal
-            channelId={activeChannel.id}
-            userId={userId}
-            onClose={() => setChannelSettingsOpen(false)}
-            onUpdate={(ch) => {
-              setActiveChannel((c) => c ? { ...c, name: ch.name, description: ch.description } : c);
-              setChannels((prev) => prev.map((c) => c.id === ch.id ? { ...c, name: ch.name, description: ch.description } : c));
-            }}
-            onLeave={() => {
-              setChannels((prev) => prev.filter((c) => c.id !== activeChannel.id));
-              setActiveChannel(null);
-            }}
-          />
-        )}
-
-        <nav className="flex-1 overflow-y-auto p-3">
+        <nav className={`flex-1 overflow-y-auto p-3 ${isMobile ? "pb-20" : ""}`}>
           {/* Channels */}
           <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/25">
             Channels
@@ -917,15 +884,6 @@ export function AppLayout() {
           </button>
         </div>
 
-        {/* Settings */}
-        {settingsOpen && userId && (
-          <SettingsModal
-            userId={userId}
-            profile={profile}
-            onClose={() => setSettingsOpen(false)}
-            onUpdate={(p) => setProfile({ display_name: p.display_name, avatar_url: p.avatar_url, status: p.status })}
-          />
-        )}
       </aside>
 
       {!isMobile && <ResizeHandle onResize={handleLeftResize} />}
@@ -1313,6 +1271,50 @@ export function AppLayout() {
         )}
       </aside>
       </>
+      )}
+
+      {/* ── MODALS (outside aside to avoid transform containment) ─────────── */}
+      {channelModalOpen && userId && (
+        <ChannelModal
+          userId={userId}
+          onClose={() => setChannelModalOpen(false)}
+          onJoin={(ch) => {
+            setChannels((prev) => {
+              const exists = prev.find((c) => c.id === ch.id);
+              if (exists) return prev;
+              return [...prev, ch];
+            });
+            setActiveChannel(ch);
+            setActiveConv(null);
+            setView("channel");
+            if (isMobile) setMobileSidebarOpen(false);
+          }}
+        />
+      )}
+
+      {channelSettingsOpen && activeChannel && userId && (
+        <ChannelSettingsModal
+          channelId={activeChannel.id}
+          userId={userId}
+          onClose={() => setChannelSettingsOpen(false)}
+          onUpdate={(ch) => {
+            setActiveChannel((c) => c ? { ...c, name: ch.name, description: ch.description } : c);
+            setChannels((prev) => prev.map((c) => c.id === ch.id ? { ...c, name: ch.name, description: ch.description } : c));
+          }}
+          onLeave={() => {
+            setChannels((prev) => prev.filter((c) => c.id !== activeChannel.id));
+            setActiveChannel(null);
+          }}
+        />
+      )}
+
+      {settingsOpen && userId && (
+        <SettingsModal
+          userId={userId}
+          profile={profile}
+          onClose={() => setSettingsOpen(false)}
+          onUpdate={(p) => setProfile({ display_name: p.display_name, avatar_url: p.avatar_url, status: p.status })}
+        />
       )}
 
       {/* ── COMPOSE OVERLAY ──────────────────────────────────────────────── */}
