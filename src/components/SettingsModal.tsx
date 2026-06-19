@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { StatusDot } from "@/components/FEmoji";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 const supabase = createClient();
 
@@ -101,6 +102,27 @@ function IconShield() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>
+  );
+}
+function IconChevronRight() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
+  );
+}
+function IconChevronLeft() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  );
+}
+function IconLogOut() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
     </svg>
   );
 }
@@ -504,9 +526,11 @@ const NAV: { id: Section; label: string; icon: React.ReactNode }[] = [
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpdate }: Props) {
-  const [section,    setSection]    = useState<Section>("profile");
-  const [sectionKey, setSectionKey] = useState(0);
-  const [prefs,      setPrefs]      = useState<NoxPrefs>(loadPrefs);
+  const isMobile = useIsMobile();
+  const [section,       setSection]       = useState<Section>("profile");
+  const [sectionKey,    setSectionKey]    = useState(0);
+  const [prefs,         setPrefs]         = useState<NoxPrefs>(loadPrefs);
+  const [mobileSection, setMobileSection] = useState<Section | null>(null);
 
   // ── Single profile fetch on open — cached for the lifetime of the modal ──
   const [fullProfile, setFullProfile] = useState<Profile | null>(null);
@@ -547,6 +571,129 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
   }
 
   const sectionTitle = NAV.find(n => n.id === section)?.label ?? "";
+  const mobileSectionTitle = NAV.find(n => n.id === mobileSection)?.label ?? "";
+
+  // ── MOBILE: section drill-down ──────────────────────────────────────────────
+  if (isMobile && mobileSection !== null) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-[#111113]" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+        {/* Header */}
+        <div className="flex items-center gap-1 border-b border-white/8 px-4 py-4 flex-shrink-0">
+          <button
+            onClick={() => setMobileSection(null)}
+            className="flex items-center gap-1 text-white/60 hover:text-white transition-colors pr-2"
+          >
+            <IconChevronLeft/>
+          </button>
+          <h2 className="text-base font-semibold text-white">{mobileSectionTitle}</h2>
+        </div>
+
+        {/* Section content */}
+        <div className="flex-1 overflow-y-auto px-4 py-5 [&::-webkit-scrollbar]:hidden" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}>
+          {mobileSection === "profile" && (
+            <ProfileSection
+              userId={userId}
+              profile={fullProfile}
+              onUpdate={onUpdate}
+              onProfileChange={handleProfileChange}
+            />
+          )}
+          {mobileSection === "notifications" && (
+            <NotificationsSection prefs={prefs} onChange={handlePref}/>
+          )}
+          {mobileSection === "appearance" && (
+            <AppearanceSection prefs={prefs} onChange={handlePref}/>
+          )}
+          {mobileSection === "audio" && (
+            <AudioVideoSection/>
+          )}
+          {mobileSection === "account" && (
+            <AccountSection email={fullProfile?.email ?? null} onSignOut={handleSignOut}/>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── MOBILE: main list ───────────────────────────────────────────────────────
+  if (isMobile) {
+    const avatarUrl = navProfile?.avatar_url;
+    const displayName = navProfile?.display_name ?? "…";
+    const statusText = navProfile?.status?.split(" ").slice(1).join(" ") ?? "Online";
+    const username = fullProfile?.username;
+
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-[#0D0D0F] overflow-hidden" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0">
+          <h1 className="text-xl font-bold text-white">Settings</h1>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/8 text-white/50 hover:text-white transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Profile card */}
+        <div className="flex flex-col items-center py-7 px-5 flex-shrink-0">
+          <div className="relative mb-4">
+            {avatarUrl
+              ? <img src={avatarUrl} alt={displayName} className="h-24 w-24 rounded-full object-cover" style={{ boxShadow: "0 0 0 3px rgba(255,255,255,0.08)" }}/>
+              : <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/10 text-3xl font-bold text-white/70" style={{ boxShadow: "0 0 0 3px rgba(255,255,255,0.08)" }}>
+                  {displayName.slice(0, 1).toUpperCase()}
+                </div>
+            }
+            <span className="absolute bottom-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#0D0D0F]">
+              <StatusDot status={navProfile?.status} size={13}/>
+            </span>
+          </div>
+          <p className="text-[19px] font-bold text-white leading-snug">{displayName}</p>
+          {username && <p className="text-sm text-white/35 mt-0.5">@{username}</p>}
+          <p className="text-sm text-white/30 mt-1">{statusText}</p>
+        </div>
+
+        {/* Nav list */}
+        <div className="flex-1 overflow-y-auto px-4 [&::-webkit-scrollbar]:hidden" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}>
+          {/* Main settings group */}
+          <div className="rounded-2xl overflow-hidden divide-y divide-white/5 mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+            {NAV.filter(n => n.id !== "account").map(item => (
+              <button
+                key={item.id}
+                onClick={() => setMobileSection(item.id)}
+                className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-white/8 transition-colors"
+              >
+                <span className="flex-shrink-0 text-white/45">{item.icon}</span>
+                <span className="flex-1 text-sm font-medium text-white">{item.label}</span>
+                <span className="text-white/20"><IconChevronRight/></span>
+              </button>
+            ))}
+          </div>
+
+          {/* Account + sign out group */}
+          <div className="rounded-2xl overflow-hidden divide-y divide-white/5 mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+            <button
+              onClick={() => setMobileSection("account")}
+              className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-white/8 transition-colors"
+            >
+              <span className="flex-shrink-0 text-white/45"><IconShield/></span>
+              <span className="flex-1 text-sm font-medium text-white">Account</span>
+              <span className="text-white/20"><IconChevronRight/></span>
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-red-500/10 transition-colors"
+            >
+              <span className="flex-shrink-0 text-red-400"><IconLogOut/></span>
+              <span className="flex-1 text-sm font-medium text-red-400">Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex bg-black/60 backdrop-blur-sm settings-panel">
