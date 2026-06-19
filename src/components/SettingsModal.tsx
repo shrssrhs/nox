@@ -531,6 +531,8 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
   const [sectionKey,    setSectionKey]    = useState(0);
   const [prefs,         setPrefs]         = useState<NoxPrefs>(loadPrefs);
   const [mobileSection, setMobileSection] = useState<Section | null>(null);
+  // keeps the last picked section so right panel stays populated during the slide-back animation
+  const [activeSection, setActiveSection] = useState<Section>("profile");
 
   // ── Single profile fetch on open — cached for the lifetime of the modal ──
   const [fullProfile, setFullProfile] = useState<Profile | null>(null);
@@ -571,51 +573,15 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
   }
 
   const sectionTitle = NAV.find(n => n.id === section)?.label ?? "";
-  const mobileSectionTitle = NAV.find(n => n.id === mobileSection)?.label ?? "";
+  // use activeSection for title so it stays correct during slide-back animation
+  const mobileSectionTitle = NAV.find(n => n.id === activeSection)?.label ?? "";
 
-  // ── MOBILE: section drill-down ──────────────────────────────────────────────
-  if (isMobile && mobileSection !== null) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[#111113]" style={{ paddingTop: "env(safe-area-inset-top)" }}>
-        {/* Header */}
-        <div className="flex items-center gap-1 border-b border-white/8 px-4 py-4 flex-shrink-0">
-          <button
-            onClick={() => setMobileSection(null)}
-            className="flex items-center gap-1 text-white/60 hover:text-white transition-colors pr-2"
-          >
-            <IconChevronLeft/>
-          </button>
-          <h2 className="text-base font-semibold text-white">{mobileSectionTitle}</h2>
-        </div>
-
-        {/* Section content */}
-        <div className="flex-1 overflow-y-auto px-4 py-5 [&::-webkit-scrollbar]:hidden" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}>
-          {mobileSection === "profile" && (
-            <ProfileSection
-              userId={userId}
-              profile={fullProfile}
-              onUpdate={onUpdate}
-              onProfileChange={handleProfileChange}
-            />
-          )}
-          {mobileSection === "notifications" && (
-            <NotificationsSection prefs={prefs} onChange={handlePref}/>
-          )}
-          {mobileSection === "appearance" && (
-            <AppearanceSection prefs={prefs} onChange={handlePref}/>
-          )}
-          {mobileSection === "audio" && (
-            <AudioVideoSection/>
-          )}
-          {mobileSection === "account" && (
-            <AccountSection email={fullProfile?.email ?? null} onSignOut={handleSignOut}/>
-          )}
-        </div>
-      </div>
-    );
+  function goToSection(s: Section) {
+    setActiveSection(s);
+    setMobileSection(s);
   }
 
-  // ── MOBILE: main list ───────────────────────────────────────────────────────
+  // ── MOBILE: two-panel slider ────────────────────────────────────────────────
   if (isMobile) {
     const avatarUrl = navProfile?.avatar_url;
     const displayName = navProfile?.display_name ?? "…";
@@ -623,72 +589,123 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
     const username = fullProfile?.username;
 
     return (
-      <div className="fixed inset-0 z-50 flex flex-col bg-[#0D0D0F] overflow-hidden" style={{ paddingTop: "env(safe-area-inset-top)" }}>
-        {/* Top bar */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0">
-          <h1 className="text-xl font-bold text-white">Settings</h1>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/8 text-white/50 hover:text-white transition-colors"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* Profile card */}
-        <div className="flex flex-col items-center py-7 px-5 flex-shrink-0">
-          <div className="relative mb-4">
-            {avatarUrl
-              ? <img src={avatarUrl} alt={displayName} className="h-24 w-24 rounded-full object-cover" style={{ boxShadow: "0 0 0 3px rgba(255,255,255,0.08)" }}/>
-              : <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/10 text-3xl font-bold text-white/70" style={{ boxShadow: "0 0 0 3px rgba(255,255,255,0.08)" }}>
-                  {displayName.slice(0, 1).toUpperCase()}
-                </div>
-            }
-            <span className="absolute bottom-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#0D0D0F]">
-              <StatusDot status={navProfile?.status} size={13}/>
-            </span>
-          </div>
-          <p className="text-[19px] font-bold text-white leading-snug">{displayName}</p>
-          {username && <p className="text-sm text-white/35 mt-0.5">@{username}</p>}
-          <p className="text-sm text-white/30 mt-1">{statusText}</p>
-        </div>
-
-        {/* Nav list */}
-        <div className="flex-1 overflow-y-auto px-4 [&::-webkit-scrollbar]:hidden" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}>
-          {/* Main settings group */}
-          <div className="rounded-2xl overflow-hidden divide-y divide-white/5 mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
-            {NAV.filter(n => n.id !== "account").map(item => (
+      <div
+        className="fixed inset-0 z-50 overflow-hidden"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
+        {/*
+          Inner row: 200vw wide (two 100vw panels side by side).
+          translateX(0)   → shows left panel (main list)
+          translateX(-50%) → shows right panel (section) — -50% of 200vw = -100vw
+        */}
+        <div
+          className="flex h-full"
+          style={{
+            width: "200%",
+            transform: mobileSection ? "translateX(-50%)" : "translateX(0)",
+            transition: "transform 0.32s cubic-bezier(0.16,1,0.3,1)",
+            willChange: "transform",
+          }}
+        >
+          {/* ── LEFT: Main list ── */}
+          <div className="flex flex-col overflow-hidden bg-[#0D0D0F]" style={{ width: "50%" }}>
+            {/* Top bar */}
+            <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0">
+              <h1 className="text-xl font-bold text-white">Settings</h1>
               <button
-                key={item.id}
-                onClick={() => setMobileSection(item.id)}
-                className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-white/8 transition-colors"
+                onClick={onClose}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/8 text-white/50 hover:text-white transition-colors"
               >
-                <span className="flex-shrink-0 text-white/45">{item.icon}</span>
-                <span className="flex-1 text-sm font-medium text-white">{item.label}</span>
-                <span className="text-white/20"><IconChevronRight/></span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
               </button>
-            ))}
+            </div>
+
+            {/* Profile card */}
+            <div className="flex flex-col items-center py-7 px-5 flex-shrink-0">
+              <div className="relative mb-4">
+                {avatarUrl
+                  ? <img src={avatarUrl} alt={displayName} className="h-24 w-24 rounded-full object-cover" style={{ boxShadow: "0 0 0 3px rgba(255,255,255,0.08)" }}/>
+                  : <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/10 text-3xl font-bold text-white/70" style={{ boxShadow: "0 0 0 3px rgba(255,255,255,0.08)" }}>
+                      {displayName.slice(0, 1).toUpperCase()}
+                    </div>
+                }
+                <span className="absolute bottom-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#0D0D0F]">
+                  <StatusDot status={navProfile?.status} size={13}/>
+                </span>
+              </div>
+              <p className="text-[19px] font-bold text-white leading-snug">{displayName}</p>
+              {username && <p className="text-sm text-white/35 mt-0.5">@{username}</p>}
+              <p className="text-sm text-white/30 mt-1">{statusText}</p>
+            </div>
+
+            {/* Nav rows */}
+            <div className="flex-1 overflow-y-auto px-4 [&::-webkit-scrollbar]:hidden" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}>
+              <div className="rounded-2xl overflow-hidden divide-y divide-white/5 mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+                {NAV.filter(n => n.id !== "account").map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => goToSection(item.id)}
+                    className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-white/8 transition-colors"
+                  >
+                    <span className="flex-shrink-0 text-white/45">{item.icon}</span>
+                    <span className="flex-1 text-sm font-medium text-white">{item.label}</span>
+                    <span className="text-white/20"><IconChevronRight/></span>
+                  </button>
+                ))}
+              </div>
+              <div className="rounded-2xl overflow-hidden divide-y divide-white/5 mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
+                <button
+                  onClick={() => goToSection("account")}
+                  className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-white/8 transition-colors"
+                >
+                  <span className="flex-shrink-0 text-white/45"><IconShield/></span>
+                  <span className="flex-1 text-sm font-medium text-white">Account</span>
+                  <span className="text-white/20"><IconChevronRight/></span>
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-red-500/10 transition-colors"
+                >
+                  <span className="flex-shrink-0 text-red-400"><IconLogOut/></span>
+                  <span className="flex-1 text-sm font-medium text-red-400">Sign Out</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          {/* Account + sign out group */}
-          <div className="rounded-2xl overflow-hidden divide-y divide-white/5 mb-3" style={{ background: "rgba(255,255,255,0.05)" }}>
-            <button
-              onClick={() => setMobileSection("account")}
-              className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-white/8 transition-colors"
-            >
-              <span className="flex-shrink-0 text-white/45"><IconShield/></span>
-              <span className="flex-1 text-sm font-medium text-white">Account</span>
-              <span className="text-white/20"><IconChevronRight/></span>
-            </button>
-            <button
-              onClick={handleSignOut}
-              className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left active:bg-red-500/10 transition-colors"
-            >
-              <span className="flex-shrink-0 text-red-400"><IconLogOut/></span>
-              <span className="flex-1 text-sm font-medium text-red-400">Sign Out</span>
-            </button>
+          {/* ── RIGHT: Section content ── */}
+          <div className="flex flex-col overflow-hidden bg-[#111113]" style={{ width: "50%" }}>
+            {/* Header */}
+            <div className="flex items-center gap-1 border-b border-white/8 px-4 py-4 flex-shrink-0">
+              <button
+                onClick={() => setMobileSection(null)}
+                className="flex items-center text-white/60 hover:text-white transition-colors pr-3"
+              >
+                <IconChevronLeft/>
+              </button>
+              <h2 className="text-base font-semibold text-white">{mobileSectionTitle}</h2>
+            </div>
+
+            {/* Content — keyed on activeSection so sections re-mount with correct data */}
+            <div key={activeSection} className="flex-1 overflow-y-auto px-4 py-5 [&::-webkit-scrollbar]:hidden" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}>
+              {activeSection === "profile" && (
+                <ProfileSection userId={userId} profile={fullProfile} onUpdate={onUpdate} onProfileChange={handleProfileChange}/>
+              )}
+              {activeSection === "notifications" && (
+                <NotificationsSection prefs={prefs} onChange={handlePref}/>
+              )}
+              {activeSection === "appearance" && (
+                <AppearanceSection prefs={prefs} onChange={handlePref}/>
+              )}
+              {activeSection === "audio" && (
+                <AudioVideoSection/>
+              )}
+              {activeSection === "account" && (
+                <AccountSection email={fullProfile?.email ?? null} onSignOut={handleSignOut}/>
+              )}
+            </div>
           </div>
         </div>
       </div>
