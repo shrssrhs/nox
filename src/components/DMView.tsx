@@ -6,6 +6,8 @@ import type { DMMessage } from "@/hooks/useDMs";
 import { createClient } from "@/lib/supabase/client";
 import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
 import { FEmoji, StatusDot, statusEmoji } from "@/components/FEmoji";
+import { useReactions } from "@/hooks/useReactions";
+import type { ReactionGroup } from "@/hooks/useReactions";
 
 const REPLY_RE = /^«R»(.+?)»(.+?)«end»\n?/;
 
@@ -25,13 +27,17 @@ function Avatar({ name, url }: { name: string | null; url?: string | null }) {
   return <div className={cls}>{(name ?? "?").slice(0, 1).toUpperCase()}</div>;
 }
 
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "🔥", "😮", "💯", "🎉", "👀"];
+
 function Bubble({
-  msg, isOwn, onReply, onEdit, onDelete,
+  msg, isOwn, onReply, onEdit, onDelete, reactions, onReact,
 }: {
   msg: DMMessage; isOwn: boolean;
   onReply: (msg: DMMessage) => void;
   onEdit:  (msgId: string, content: string) => Promise<void>;
   onDelete:(msgId: string) => Promise<void>;
+  reactions: ReactionGroup[];
+  onReact: (emoji: string) => void;
 }) {
   const name = msg.profiles?.display_name ?? "Unknown";
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -43,6 +49,7 @@ function Bubble({
 
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuPos, setMenuPos]         = useState({ x: 0, y: 0 });
+  const [showPicker, setShowPicker]   = useState(false);
   const [isEditing, setIsEditing]     = useState(false);
   const [editValue, setEditValue]     = useState(text);
   const [previewUrl, setPreviewUrl]   = useState<string | null>(null);
@@ -154,24 +161,61 @@ function Bubble({
         </div>
       </div>
 
+      {/* Reaction bar */}
+      {reactions.length > 0 && (
+        <div className={`flex flex-wrap gap-1 mt-1 ${isOwn ? "justify-end" : ""}`}>
+          {reactions.map((r) => (
+            <button
+              key={r.emoji}
+              onClick={() => onReact(r.emoji)}
+              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-all ${
+                r.hasMe
+                  ? "border-white/25 bg-white/10 text-white"
+                  : "border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              <FEmoji emoji={r.emoji} size={13} />
+              <span className="font-medium">{r.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Context menu */}
       {menuVisible && (
         <div
-          className="fixed z-50 flex flex-col min-w-[110px] bg-[#0D0D0F] border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
-          style={{ top: menuPos.y, left: menuPos.x }}
+          className="fixed z-50 flex flex-col bg-[#0D0D0F] border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
+          style={{ top: menuPos.y, left: menuPos.x, minWidth: showPicker ? 180 : 110 }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button onClick={() => { onReply(msg); setMenuVisible(false); }} className={menuBtn}>[reply]</button>
-          {isOwn && !isImage && !isVideo && !isStorageFile && (
-            <button onClick={() => { setIsEditing(true); setMenuVisible(false); }} className={menuBtn}>[edit]</button>
-          )}
-          <button onClick={() => { handleCopy(); setMenuVisible(false); }} className={menuBtn}>[copy]</button>
-          {isOwn && <div className="my-1 border-t border-white/5" />}
-          {isOwn && (
-            <button
-              onClick={() => { onDelete(msg.id); setMenuVisible(false); }}
-              className="w-full text-left font-mono text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
-            >[delete]</button>
+          {showPicker ? (
+            <>
+              <button onClick={() => setShowPicker(false)} className="text-left font-mono text-[11px] text-white/25 hover:text-white/60 px-3 py-1.5 transition-colors">‹ back</button>
+              <div className="grid grid-cols-4 gap-0.5 p-1">
+                {QUICK_REACTIONS.map((e) => (
+                  <button key={e} onClick={() => { onReact(e); setMenuVisible(false); setShowPicker(false); }}
+                    className="flex items-center justify-center p-2 rounded-lg hover:bg-white/10 transition-colors">
+                    <FEmoji emoji={e} size={22} />
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <button onClick={() => { onReply(msg); setMenuVisible(false); }} className={menuBtn}>[reply]</button>
+              <button onClick={() => setShowPicker(true)} className={menuBtn}>[react]</button>
+              {isOwn && !isImage && !isVideo && !isStorageFile && (
+                <button onClick={() => { setIsEditing(true); setMenuVisible(false); }} className={menuBtn}>[edit]</button>
+              )}
+              <button onClick={() => { handleCopy(); setMenuVisible(false); }} className={menuBtn}>[copy]</button>
+              {isOwn && <div className="my-1 border-t border-white/5" />}
+              {isOwn && (
+                <button
+                  onClick={() => { onDelete(msg.id); setMenuVisible(false); }}
+                  className="w-full text-left font-mono text-xs text-red-500/60 hover:text-red-400 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
+                >[delete]</button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -184,6 +228,7 @@ function Bubble({
 export function DMView({ conversationId, userId, otherUser }: Props) {
   const supabase = createClient();
   const { messages, sendDM, editDM, deleteDM, loading, bottomRef } = useDMMessages(conversationId);
+  const { reactions, toggle: toggleReaction } = useReactions(messages.map((m) => m.id), userId);
   const [draft, setDraft]           = useState("");
   const [replyingTo, setReplyingTo] = useState<DMMessage | null>(null);
   const fileInputRef                = useRef<HTMLInputElement>(null);
@@ -264,6 +309,8 @@ export function DMView({ conversationId, userId, otherUser }: Props) {
                 onReply={setReplyingTo}
                 onEdit={editDM}
                 onDelete={deleteDM}
+                reactions={reactions[msg.id] ?? []}
+                onReact={(emoji) => toggleReaction(msg.id, emoji)}
               />
             ))}
             <div ref={bottomRef}/>

@@ -33,6 +33,20 @@ const MAP: Record<string, [string, string]> = {
   "🤒": ["Face with Thermometer", "face_with_thermometer"],
   "👻": ["Ghost", "ghost"],
 
+  // Reactions
+  "👍": ["Thumbs Up", "thumbs_up"],
+  "❤️": ["Red Heart", "red_heart"],
+  "😂": ["Face with Tears of Joy", "face_with_tears_of_joy"],
+  "🔥": ["Fire", "fire"],
+  "😮": ["Face with Open Mouth", "face_with_open_mouth"],
+  "💯": ["Hundred Points", "hundred_points"],
+  "🎉": ["Party Popper", "party_popper"],
+  "👀": ["Eyes", "eyes"],
+  "😍": ["Smiling Face with Heart-Eyes", "smiling_face_with_heart-eyes"],
+  "🤣": ["Rolling on the Floor Laughing", "rolling_on_the_floor_laughing"],
+  "😭": ["Loudly Crying Face", "loudly_crying_face"],
+  "🤯": ["Exploding Head", "exploding_head"],
+
   // UI icons
   "💬": ["Speech Balloon", "speech_balloon"],
   "👋": ["Waving Hand", "waving_hand"],
