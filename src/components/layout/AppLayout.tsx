@@ -21,6 +21,7 @@ import { renderMarkdown } from "@/lib/markdown";
 import { useReactions } from "@/hooks/useReactions";
 import type { ReactionGroup } from "@/hooks/useReactions";
 import { useTyping } from "@/hooks/useTyping";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Channel {
@@ -533,6 +534,9 @@ export function AppLayout() {
 
   // Channels
   const [channels, setChannels]           = useState<Channel[]>([]);
+  const isMobile = useIsMobile();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(true);
+
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
 
   // DMs
@@ -744,9 +748,22 @@ export function AppLayout() {
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-white">
 
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
+      {/* Mobile backdrop */}
+      {isMobile && mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
       <aside
-        className="flex h-full flex-col border-r border-white/10 bg-[#0D0D0F]"
-        style={{ width: leftWidth, minWidth: MIN_SIDE, flexShrink: 0 }}
+        className={`flex h-full flex-col border-r border-white/10 bg-[#0D0D0F] ${
+          isMobile
+            ? `fixed inset-y-0 left-0 z-40 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+              }`
+            : ""
+        }`}
+        style={isMobile ? { width: "min(85vw, 320px)" } : { width: leftWidth, minWidth: MIN_SIDE, flexShrink: 0 }}
       >
         <div className="border-b border-white/10 p-5">
           <h1 className="text-xl font-semibold tracking-tight">Nox</h1>
@@ -802,7 +819,7 @@ export function AppLayout() {
           {channels.map((ch) => (
             <button
               key={ch.id}
-              onClick={() => { setActiveChannel(ch); setActiveConv(null); setView("channel"); markRead(ch.id); }}
+              onClick={() => { setActiveChannel(ch); setActiveConv(null); setView("channel"); markRead(ch.id); if (isMobile) setMobileSidebarOpen(false); }}
               className={`mb-0.5 w-full rounded-lg px-3 py-2 text-left text-sm transition-colors flex items-center justify-between ${
                 view === "channel" && activeChannel?.id === ch.id
                   ? "bg-white/10 text-white"
@@ -829,7 +846,7 @@ export function AppLayout() {
             return (
               <button
                 key={conv.id}
-                onClick={() => { setActiveConv(conv); setActiveChannel(null); setView("dm"); markRead(conv.id); }}
+                onClick={() => { setActiveConv(conv); setActiveChannel(null); setView("dm"); markRead(conv.id); if (isMobile) setMobileSidebarOpen(false); }}
                 className={`mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                   view === "dm" && activeConv?.id === conv.id
                     ? "bg-white/10 text-white"
@@ -911,24 +928,49 @@ export function AppLayout() {
         )}
       </aside>
 
-      <ResizeHandle onResize={handleLeftResize} />
+      {!isMobile && <ResizeHandle onResize={handleLeftResize} />}
 
       {/* ── MAIN CHAT ────────────────────────────────────────────────────── */}
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className={`flex min-w-0 flex-1 flex-col ${isMobile ? "pb-[60px]" : ""}`}>
         {/* DM view */}
         {view === "dm" && activeConv && userId && (
-          <DMView
-            conversationId={activeConv.id}
-            userId={userId}
-            userName={profile?.display_name ?? "User"}
-            otherUser={activeConv.other_user}
-          />
+          <>
+            {isMobile && (
+              <div className="flex items-center gap-2 border-b border-white/10 px-3 py-3 shrink-0">
+                <button
+                  onClick={() => setMobileSidebarOpen(true)}
+                  className="flex items-center justify-center rounded-lg p-1.5 text-white/40 hover:bg-white/8 hover:text-white transition-colors"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6"/>
+                  </svg>
+                </button>
+                <span className="text-sm font-medium text-white/80">{activeConv.other_user.display_name}</span>
+              </div>
+            )}
+            <DMView
+              conversationId={activeConv.id}
+              userId={userId}
+              userName={profile?.display_name ?? "User"}
+              otherUser={activeConv.other_user}
+            />
+          </>
         )}
 
         {/* Channel header */}
         {view === "channel" && (
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-4 md:px-6">
           <div className="flex items-center gap-3">
+            {isMobile && (
+              <button
+                onClick={() => setMobileSidebarOpen(true)}
+                className="mr-1 flex items-center justify-center rounded-lg p-1.5 text-white/40 hover:bg-white/8 hover:text-white transition-colors"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6"/>
+                </svg>
+              </button>
+            )}
             <h2 className="font-medium">{activeChannel?.name ?? "—"}</h2>
             {activeChannel?.description && (
               <span className="hidden text-xs text-white/30 sm:block">
@@ -1240,7 +1282,7 @@ export function AppLayout() {
       </main>
 
       {/* ── RIGHT PANEL ──────────────────────────────────────────────────── */}
-      {((view === "channel" && activeChannel) || (view === "dm" && activeConv)) && (
+      {!isMobile && ((view === "channel" && activeChannel) || (view === "dm" && activeConv)) && (
       <>
       <ResizeHandle onResize={handleRightResize} />
       <aside
@@ -1332,8 +1374,50 @@ export function AppLayout() {
             setActiveConv({ id: convId, other_user: previewUser });
             setActiveChannel(null);
             setView("dm");
+            if (isMobile) setMobileSidebarOpen(false);
           }}
         />
+      )}
+
+      {/* ── MOBILE BOTTOM NAV ────────────────────────────────────────────── */}
+      {isMobile && (
+        <nav className="fixed bottom-0 inset-x-0 z-50 flex h-[60px] items-center justify-around border-t border-white/10 bg-[#0D0D0F]">
+          {/* Channels */}
+          <button
+            onClick={() => { setMobileSidebarOpen(true); }}
+            className="flex flex-1 flex-col items-center justify-center gap-1 py-2 text-white/40 hover:text-white transition-colors"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span className="text-[10px] font-medium tracking-wide">Channels</span>
+          </button>
+
+          {/* DMs */}
+          <button
+            onClick={() => { setMobileSidebarOpen(true); }}
+            className="flex flex-1 flex-col items-center justify-center gap-1 py-2 text-white/40 hover:text-white transition-colors"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+            </svg>
+            <span className="text-[10px] font-medium tracking-wide">Messages</span>
+          </button>
+
+          {/* Settings */}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="flex flex-1 flex-col items-center justify-center gap-1 py-2 text-white/40 hover:text-white transition-colors"
+          >
+            {profile?.avatar_url
+              ? <img src={profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />
+              : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="8" r="4"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/>
+                </svg>
+            }
+            <span className="text-[10px] font-medium tracking-wide">Profile</span>
+          </button>
+        </nav>
       )}
     </div>
   );

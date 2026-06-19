@@ -14,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ONIR Nox",
-  description: "Nox messenger",
+  title: "Nox",
+  description: "Your space. Your people.",
+  manifest: "/manifest.json",
+  themeColor: "#09090b",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Nox" },
 };
 
 export default function RootLayout({

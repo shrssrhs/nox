@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { swNotify } from "@/components/PrefsInit";
 
 const supabase = createClient();
 
@@ -9,13 +10,6 @@ function requestNotificationPermission() {
   if (typeof Notification !== "undefined" && Notification.permission === "default") {
     Notification.requestPermission();
   }
-}
-
-function fireNotification(title: string, body: string) {
-  if (typeof Notification === "undefined") return;
-  if (Notification.permission !== "granted") return;
-  if (document.hasFocus()) return; // don't spam when window is focused
-  new Notification(title, { body, icon: "/favicon.ico", silent: false });
 }
 
 interface UseUnreadOptions {
@@ -39,40 +33,30 @@ export function useUnread({
   const activeIdRef = useRef(activeId);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
-  // Request permission once
   useEffect(() => { requestNotificationPermission(); }, []);
 
-  // Channel message subscriptions
+  // Channel subscriptions
   useEffect(() => {
     if (!channelIds.length || !userId) return;
 
-    const chSub = supabase
+    const sub = supabase
       .channel(`unread-channels-${userId}`)
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `channel_id=in.(${channelIds.join(",")})`,
-        },
+        { event: "INSERT", schema: "public", table: "messages",
+          filter: `channel_id=in.(${channelIds.join(",")})` },
         (payload) => {
           const { channel_id, sender_id } = payload.new as { channel_id: string; sender_id: string };
           if (sender_id === userId) return;
           if (channel_id === activeIdRef.current) return;
 
-          setUnread((prev) => ({
-            ...prev,
-            [channel_id]: (prev[channel_id] ?? 0) + 1,
-          }));
-
-          const name = channelNames[channel_id] ?? "channel";
-          fireNotification(`#${name}`, "New message");
+          setUnread((p) => ({ ...p, [channel_id]: (p[channel_id] ?? 0) + 1 }));
+          swNotify(`#${channelNames[channel_id] ?? "channel"}`, "New message", `ch-${channel_id}`);
         }
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(chSub); };
+    return () => { supabase.removeChannel(sub); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelIds.join(","), userId]);
 
@@ -80,42 +64,31 @@ export function useUnread({
   useEffect(() => {
     if (!convIds.length || !userId) return;
 
-    const dmSub = supabase
+    const sub = supabase
       .channel(`unread-dms-${userId}`)
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "direct_messages",
-          filter: `conversation_id=in.(${convIds.join(",")})`,
-        },
+        { event: "INSERT", schema: "public", table: "direct_messages",
+          filter: `conversation_id=in.(${convIds.join(",")})` },
         (payload) => {
           const { conversation_id, sender_id } = payload.new as { conversation_id: string; sender_id: string };
           if (sender_id === userId) return;
           if (conversation_id === activeIdRef.current) return;
 
-          setUnread((prev) => ({
-            ...prev,
-            [conversation_id]: (prev[conversation_id] ?? 0) + 1,
-          }));
-
-          const name = convNames[conversation_id] ?? "someone";
-          fireNotification(name, "New message");
+          setUnread((p) => ({ ...p, [conversation_id]: (p[conversation_id] ?? 0) + 1 }));
+          swNotify(convNames[conversation_id] ?? "Someone", "New message", `dm-${conversation_id}`);
         }
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(dmSub); };
+    return () => { supabase.removeChannel(sub); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [convIds.join(","), userId]);
 
   const markRead = useCallback((id: string) => {
-    setUnread((prev) => {
-      if (!prev[id]) return prev;
-      const next = { ...prev };
-      delete next[id];
-      return next;
+    setUnread((p) => {
+      if (!p[id]) return p;
+      const n = { ...p }; delete n[id]; return n;
     });
   }, []);
 
