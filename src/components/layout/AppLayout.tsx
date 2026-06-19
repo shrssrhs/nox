@@ -17,8 +17,10 @@ import { ChannelSettingsModal } from "@/components/ChannelSettingsModal";
 import { DMProfilePanel } from "@/components/DMProfilePanel";
 import { UserPreviewModal } from "@/components/UserPreviewModal";
 import { FEmoji, StatusDot, statusEmoji } from "@/components/FEmoji";
+import { renderMarkdown } from "@/lib/markdown";
 import { useReactions } from "@/hooks/useReactions";
 import type { ReactionGroup } from "@/hooks/useReactions";
+import { useTyping } from "@/hooks/useTyping";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Channel {
@@ -280,7 +282,7 @@ function MessageBubble({
               </div>
             </a>
           ) : (
-            text
+            <span className="msg-text">{renderMarkdown(text)}</span>
           )}
         </div>
 
@@ -666,6 +668,9 @@ export function AppLayout() {
   // Input
   const [draft, setDraft] = useState("");
   const sending = useRef(false);
+  const channelTypingId = view === "channel" ? (activeChannel?.id ?? "") : (activeConv?.id ?? "");
+  const { typingUsers: channelTyping, startTyping: chStartTyping, stopTyping: chStopTyping } =
+    useTyping(channelTypingId, userId ?? "", profile?.display_name ?? "User");
 
   const handleSend = useCallback(async () => {
     if (!draft.trim() || sending.current) return;
@@ -915,6 +920,7 @@ export function AppLayout() {
           <DMView
             conversationId={activeConv.id}
             userId={userId}
+            userName={profile?.display_name ?? "User"}
             otherUser={activeConv.other_user}
           />
         )}
@@ -1187,8 +1193,9 @@ export function AppLayout() {
             
             <textarea
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={(e) => { setDraft(e.target.value); chStartTyping(); }}
               onKeyDown={handleKeyDown}
+              onBlur={chStopTyping}
               placeholder={activeChannel ? `Message #${activeChannel.name}…` : "Select a channel…"}
               disabled={!activeChannel || uploadingFile}
               rows={1}
@@ -1207,7 +1214,17 @@ export function AppLayout() {
               </svg>
             </button>
           </div>
-          <p className="mt-2 pl-1 text-[11px] text-white/20">
+          <div className={`overflow-hidden transition-all duration-200 ${channelTyping.length > 0 ? "max-h-5 mt-1" : "max-h-0"}`}>
+            <p className="pl-1 text-[11px] text-white/30 italic">
+              {channelTyping.join(", ")} {channelTyping.length === 1 ? "is" : "are"} typing
+              <span className="inline-flex gap-0.5 ml-1">
+                <span className="animate-bounce" style={{ animationDelay: "0ms" }}>.</span>
+                <span className="animate-bounce" style={{ animationDelay: "150ms" }}>.</span>
+                <span className="animate-bounce" style={{ animationDelay: "300ms" }}>.</span>
+              </span>
+            </p>
+          </div>
+          <p className="mt-1 pl-1 text-[11px] text-white/20">
             Enter to send · Shift+Enter for new line · Click 📎 to share media
           </p>
         </div>

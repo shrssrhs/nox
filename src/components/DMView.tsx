@@ -8,12 +8,15 @@ import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
 import { FEmoji, StatusDot, statusEmoji } from "@/components/FEmoji";
 import { useReactions } from "@/hooks/useReactions";
 import type { ReactionGroup } from "@/hooks/useReactions";
+import { useTyping } from "@/hooks/useTyping";
+import { renderMarkdown } from "@/lib/markdown";
 
 const REPLY_RE = /^«R»(.+?)»(.+?)«end»\n?/;
 
 interface Props {
   conversationId: string;
   userId: string;
+  userName: string;
   otherUser: {
     display_name: string | null;
     avatar_url:   string | null;
@@ -157,7 +160,7 @@ function Bubble({
                 <p className="text-[10px] text-white/30">Click to download</p>
               </div>
             </a>
-          ) : text}
+          ) : <span className="msg-text">{renderMarkdown(text)}</span>}
         </div>
 
         {/* Reaction bar */}
@@ -225,10 +228,11 @@ function Bubble({
   );
 }
 
-export function DMView({ conversationId, userId, otherUser }: Props) {
+export function DMView({ conversationId, userId, userName, otherUser }: Props) {
   const supabase = createClient();
   const { messages, sendDM, editDM, deleteDM, loading, bottomRef } = useDMMessages(conversationId);
   const { reactions, toggle: toggleReaction } = useReactions(messages.map((m) => m.id), userId);
+  const { typingUsers, startTyping, stopTyping } = useTyping(conversationId, userId, userName);
   const [draft, setDraft]           = useState("");
   const [replyingTo, setReplyingTo] = useState<DMMessage | null>(null);
   const fileInputRef                = useRef<HTMLInputElement>(null);
@@ -320,6 +324,17 @@ export function DMView({ conversationId, userId, otherUser }: Props) {
 
       {/* Input */}
       <div className="border-t border-white/10 flex-shrink-0">
+        {/* Typing indicator */}
+        <div className={`overflow-hidden transition-all duration-200 ${typingUsers.length > 0 ? "max-h-6" : "max-h-0"}`}>
+          <p className="px-5 pt-1.5 text-[11px] text-white/30 italic">
+            {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing
+            <span className="inline-flex gap-0.5 ml-1">
+              <span className="animate-bounce" style={{ animationDelay: "0ms" }}>.</span>
+              <span className="animate-bounce" style={{ animationDelay: "150ms" }}>.</span>
+              <span className="animate-bounce" style={{ animationDelay: "300ms" }}>.</span>
+            </span>
+          </p>
+        </div>
         {replyingTo && (
           <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
             <span className="text-[11px] text-white/40 truncate max-w-[80%]">
@@ -342,8 +357,9 @@ export function DMView({ conversationId, userId, otherUser }: Props) {
           </button>
           <textarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => { setDraft(e.target.value); startTyping(); }}
             onKeyDown={handleKeyDown}
+            onBlur={stopTyping}
             placeholder={`Message ${otherUser.display_name ?? ""}…`}
             rows={1}
             className="flex-1 resize-none overflow-hidden rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-white/20 [&::-webkit-scrollbar]:hidden"
