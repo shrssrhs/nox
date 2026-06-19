@@ -18,3 +18,11 @@ body {
 *::-webkit-scrollbar {
   display: none; /* Chrome, Safari */
 }
+
+/* Font size preferences */
+body[data-font-size="sm"] .msg-text { font-size: 12px; }
+body[data-font-size="lg"] .msg-text { font-size: 16px; }
+
+/* Compact mode */
+body.nox-compact .msg-row { padding-top: 2px; padding-bottom: 2px; }
+body.nox-compact .msg-gap { gap: 0.25rem; }

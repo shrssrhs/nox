@@ -7,7 +7,7 @@ import { useMessages } from "@/hooks/useMessages";
 import type { Message } from "@/hooks/useMessages";
 import { CallRoom } from "@/components/CallRoom";
 import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
-import { ProfileModal } from "@/components/ProfileModal";
+import { SettingsModal } from "@/components/SettingsModal";
 import { DMView } from "@/components/DMView";
 import { useConversations, getOrCreateConversation } from "@/hooks/useDMs";
 import { useUnread } from "@/hooks/useUnread";
@@ -499,7 +499,7 @@ export function AppLayout() {
   const [previewUser, setPreviewUser] = useState<any | null>(null);
   const [profile, setProfile]     = useState<Profile | null>(null);
   const [userId, setUserId]       = useState<string | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [channelModalOpen, setChannelModalOpen] = useState(false);
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
   
@@ -872,7 +872,7 @@ export function AppLayout() {
         {/* User Profile Block */}
         <div className="border-t border-white/10 p-4">
           <button
-            onClick={() => setProfileOpen(true)}
+            onClick={() => setSettingsOpen(true)}
             className="flex w-full items-center gap-3 rounded-xl p-1 transition-colors hover:bg-white/5"
           >
             <div className="relative">
@@ -895,11 +895,12 @@ export function AppLayout() {
           </button>
         </div>
 
-        {/* Profile modal */}
-        {profileOpen && userId && (
-          <ProfileModal
+        {/* Settings */}
+        {settingsOpen && userId && (
+          <SettingsModal
             userId={userId}
-            onClose={() => setProfileOpen(false)}
+            profile={profile}
+            onClose={() => setSettingsOpen(false)}
             onUpdate={(p) => setProfile({ display_name: p.display_name, avatar_url: p.avatar_url, status: p.status })}
           />
         )}

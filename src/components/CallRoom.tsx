@@ -34,6 +34,7 @@ interface CallRoomProps {
 }
 
 function playJoinSound() {
+  if (localStorage.getItem("nox_join_sound") === "false") return;
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
