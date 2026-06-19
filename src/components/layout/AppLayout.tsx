@@ -13,6 +13,7 @@ import { useConversations, getOrCreateConversation } from "@/hooks/useDMs";
 import { useUnread } from "@/hooks/useUnread";
 import type { Conversation } from "@/hooks/useDMs";
 import { ChannelModal } from "@/components/ChannelModal";
+import { ChannelSettingsModal } from "@/components/ChannelSettingsModal";
 import { DMProfilePanel } from "@/components/DMProfilePanel";
 import { UserPreviewModal } from "@/components/UserPreviewModal";
 import { FEmoji, StatusDot, statusEmoji } from "@/components/FEmoji";
@@ -500,6 +501,7 @@ export function AppLayout() {
   const [userId, setUserId]       = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [channelModalOpen, setChannelModalOpen] = useState(false);
+  const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
   
   useEffect(() => {
     async function initUser() {
@@ -768,6 +770,22 @@ export function AppLayout() {
           />
         )}
 
+        {channelSettingsOpen && activeChannel && userId && (
+          <ChannelSettingsModal
+            channelId={activeChannel.id}
+            userId={userId}
+            onClose={() => setChannelSettingsOpen(false)}
+            onUpdate={(ch) => {
+              setActiveChannel((c) => c ? { ...c, name: ch.name, description: ch.description } : c);
+              setChannels((prev) => prev.map((c) => c.id === ch.id ? { ...c, name: ch.name, description: ch.description } : c));
+            }}
+            onLeave={() => {
+              setChannels((prev) => prev.filter((c) => c.id !== activeChannel.id));
+              setActiveChannel(null);
+            }}
+          />
+        )}
+
         <nav className="flex-1 overflow-y-auto p-3">
           {/* Channels */}
           <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/25">
@@ -913,43 +931,56 @@ export function AppLayout() {
           </div>
 
           {activeChannel && (
-            <button
-              onClick={() => {
-                if (callActive && activeChannel.id === callChannelId) {
-                  setCallActive(false);
-                  setCallRoomName("");
-                  setCallChannelId("");
-                  setCallChannelName("");
-                } else {
-                  setCallRoomName(`nox-${activeChannel.id}`);
-                  setCallChannelId(activeChannel.id);
-                  setCallChannelName(activeChannel.name);
-                  setCallActive(true);
-                }
-              }}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition-colors ${
-                callActive && activeChannel.id === callChannelId
-                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                  : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              {callActive && activeChannel.id === callChannelId ? (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07"/>
-                    <line x1="1" y1="1" x2="23" y2="23"/>
-                  </svg>
-                  End call
-                </>
-              ) : (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                  </svg>
-                  Call
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (callActive && activeChannel.id === callChannelId) {
+                    setCallActive(false);
+                    setCallRoomName("");
+                    setCallChannelId("");
+                    setCallChannelName("");
+                  } else {
+                    setCallRoomName(`nox-${activeChannel.id}`);
+                    setCallChannelId(activeChannel.id);
+                    setCallChannelName(activeChannel.name);
+                    setCallActive(true);
+                  }
+                }}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition-colors ${
+                  callActive && activeChannel.id === callChannelId
+                    ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                    : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {callActive && activeChannel.id === callChannelId ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                    End call
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                    </svg>
+                    Call
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => setChannelSettingsOpen(true)}
+                className="flex items-center justify-center w-9 h-9 rounded-xl bg-white/5 text-white/40 hover:bg-white/10 hover:text-white transition-colors"
+                title="Channel settings"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+              </button>
+            </div>
           )}
         </div>
         )}
