@@ -304,7 +304,7 @@ export function DMView({ conversationId, userId, userName, otherUser }: Props) {
             <p className="text-sm">Start a conversation with <span className="text-white/40">{otherUser.display_name}</span></p>
           </div>
         ) : (
-          <div className="flex flex-col gap-4 p-6">
+          <div className="messages-list flex flex-col gap-4 p-6">
             {messages.map((msg) => (
               <Bubble
                 key={msg.id}

@@ -1132,7 +1132,7 @@ export function AppLayout() {
               <span className="text-sm">No messages yet. Say hello!</span>
             </div>
           ) : (
-            <div className="flex flex-col gap-4 p-6">
+            <div className="messages-list flex flex-col gap-4 p-6">
               {messages.map((msg) => (
                 <MessageBubble
                   key={msg.id}

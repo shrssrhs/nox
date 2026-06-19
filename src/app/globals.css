@@ -20,12 +20,11 @@ body {
 }
 
 /* Font size preferences */
-body[data-font-size="sm"] .msg-text { font-size: 12px; }
-body[data-font-size="lg"] .msg-text { font-size: 16px; }
+body[data-font-size="sm"] .msg-text { font-size: 11px !important; }
+body[data-font-size="lg"] .msg-text { font-size: 16px !important; }
 
-/* Compact mode */
-body.nox-compact .msg-row { padding-top: 2px; padding-bottom: 2px; }
-body.nox-compact .msg-gap { gap: 0.25rem; }
+/* Compact mode — targets .messages-list class on message list containers */
+body.nox-compact .messages-list { gap: 0.375rem !important; padding: 0.75rem 1.5rem !important; }
 
 /* Settings animations */
 @keyframes settings-in {
