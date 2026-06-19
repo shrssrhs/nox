@@ -41,6 +41,10 @@ export function useReactions(messageIds: string[], userId: string) {
 
   useEffect(() => { refetch(); }, [refetch]);
 
+  // Keep a ref to the latest refetch so the subscription never captures a stale closure
+  const refetchRef = useRef(refetch);
+  useEffect(() => { refetchRef.current = refetch; }, [refetch]);
+
   // Single subscription that refetches on any reaction change
   const channelRef = useRef<string>("");
   useEffect(() => {
@@ -51,12 +55,12 @@ export function useReactions(messageIds: string[], userId: string) {
 
     const sub = supabase
       .channel(key)
-      .on("postgres_changes", { event: "*", schema: "public", table: "reactions" }, () => refetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "reactions" }, () => refetchRef.current())
       .subscribe();
 
     return () => { supabase.removeChannel(sub); channelRef.current = ""; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, messageIds[0], refetch]);
+  }, [userId, messageIds[0]]);
 
   const toggle = useCallback(async (messageId: string, emoji: string) => {
     const hasMe = data[messageId]?.find((r) => r.emoji === emoji)?.hasMe;

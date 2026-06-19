@@ -122,6 +122,14 @@ export function FEmoji({ emoji, size = 16, className = "" }: FEmojiProps) {
       className={className}
       draggable={false}
       style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0 }}
+      onError={(e) => {
+        const el = e.currentTarget;
+        const span = document.createElement("span");
+        span.textContent = emoji;
+        span.style.fontSize = `${Math.round(size * 0.85)}px`;
+        span.style.lineHeight = "1";
+        el.replaceWith(span);
+      }}
     />
   );
 }

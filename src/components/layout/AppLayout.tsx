@@ -282,28 +282,27 @@ function MessageBubble({
             text
           )}
         </div>
-      </div>
 
-      {/* Reaction bar */}
-      {reactions.length > 0 && (
-        <div className={`flex flex-wrap gap-1 mt-1 col-start-2 ${isOwn ? "justify-end" : ""}`}
-          style={{ gridColumn: "2" }}>
-          {reactions.map((r) => (
-            <button
-              key={r.emoji}
-              onClick={() => onReact(r.emoji)}
-              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-all ${
-                r.hasMe
-                  ? "border-white/25 bg-white/10 text-white"
-                  : "border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              <FEmoji emoji={r.emoji} size={13} />
-              <span className="font-medium">{r.count}</span>
-            </button>
-          ))}
-        </div>
-      )}
+        {/* Reaction bar */}
+        {reactions.length > 0 && (
+          <div className={`flex flex-wrap gap-1 ${isOwn ? "justify-end" : ""}`}>
+            {reactions.map((r) => (
+              <button
+                key={r.emoji}
+                onClick={() => onReact(r.emoji)}
+                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-all ${
+                  r.hasMe
+                    ? "border-white/25 bg-white/10 text-white"
+                    : "border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <FEmoji emoji={r.emoji} size={13} />
+                <span className="font-medium">{r.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Context menu */}
       {menuVisible && (
