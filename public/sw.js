@@ -1,13 +1,20 @@
-// Nox service worker — background notifications + PWA shell
+// Nox service worker — background notifications only (never caches app assets)
 
-const CACHE = "nox-v1";
+const CACHE = "nox-v2";
 
 self.addEventListener("install", (e) => {
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (e) => {
-  e.waitUntil(clients.claim());
+  e.waitUntil(
+    (async () => {
+      // Defensive: purge any caches a previous SW version may have created so we
+      // can never serve stale JS/CSS. This SW intentionally has no fetch handler.
+      for (const key of await caches.keys()) await caches.delete(key);
+      await clients.claim();
+    })()
+  );
 });
 
 // Show notification triggered from the page via postMessage
