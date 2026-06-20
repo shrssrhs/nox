@@ -4,13 +4,22 @@ import { useEffect } from "react";
 
 export function PrefsInit() {
   useEffect(() => {
-    // Apply saved appearance prefs
+    const root = document.documentElement;
+    // Restore font size
     const fontSize = localStorage.getItem("nox_font_size");
     if (fontSize) {
-      try { document.body.setAttribute("data-font-size", JSON.parse(fontSize)); } catch {}
+      try {
+        const val = JSON.parse(fontSize) as string;
+        const sizes: Record<string, string> = { sm: "11px", lg: "16px" };
+        if (sizes[val]) root.style.setProperty("--nox-font-size", sizes[val]);
+      } catch {}
     }
+    // Restore compact mode
     const compact = localStorage.getItem("nox_compact_mode");
-    if (compact === "true") document.body.classList.add("nox-compact");
+    if (compact === "true") {
+      root.style.setProperty("--nox-gap", "0.375rem");
+      root.style.setProperty("--nox-padding", "0.75rem 1.5rem");
+    }
 
     // Register service worker for background notifications
     if ("serviceWorker" in navigator) {

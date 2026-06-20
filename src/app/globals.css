@@ -19,12 +19,12 @@ body {
   display: none; /* Chrome, Safari */
 }
 
-/* Font size preferences */
-body[data-font-size="sm"] .msg-text { font-size: 11px !important; }
-body[data-font-size="lg"] .msg-text { font-size: 16px !important; }
+/* Message font size — JS sets --nox-font-size on :root via inline style */
+.msg-text { font-size: var(--nox-font-size, var(--text-sm, 0.875rem)); }
 
-/* Compact mode — targets .messages-list class on message list containers */
-body.nox-compact .messages-list { gap: 0.375rem !important; padding: 0.75rem 1.5rem !important; }
+/* Message list spacing — JS sets --nox-gap / --nox-padding on :root via inline style.
+   Gap/padding are defined here so Tailwind's gap-4/p-6 utilities are not needed on the element. */
+.messages-list { gap: var(--nox-gap, 1rem); padding: var(--nox-padding, 1.5rem); }
 
 /* Welcome animation */
 @keyframes nox-gradient-sweep {

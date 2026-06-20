@@ -559,12 +559,25 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
   }
 
   function handlePref<K extends keyof NoxPrefs>(key: K, val: NoxPrefs[K]) {
-    // Convert camelCase key to snake_case for localStorage
     const lsKey = "nox_" + key.replace(/([A-Z])/g, m => "_" + m.toLowerCase());
     setPref(lsKey, val);
     setPrefs(p => ({ ...p, [key]: val }));
-    if (key === "compactMode")  document.body.classList.toggle("nox-compact", val as boolean);
-    if (key === "fontSize")     document.body.setAttribute("data-font-size", val as string);
+    const root = document.documentElement;
+    if (key === "compactMode") {
+      if (val) {
+        root.style.setProperty("--nox-gap", "0.375rem");
+        root.style.setProperty("--nox-padding", "0.75rem 1.5rem");
+      } else {
+        root.style.removeProperty("--nox-gap");
+        root.style.removeProperty("--nox-padding");
+      }
+    }
+    if (key === "fontSize") {
+      const sizes: Record<string, string> = { sm: "11px", lg: "16px" };
+      const sz = sizes[val as string];
+      if (sz) root.style.setProperty("--nox-font-size", sz);
+      else root.style.removeProperty("--nox-font-size");
+    }
   }
 
   async function handleSignOut() {
