@@ -119,8 +119,12 @@ function runParticles(canvas: HTMLCanvasElement, onDone: () => void) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
-  const already = typeof window !== "undefined" && !!localStorage.getItem("nox_welcome_seen");
-  const [gone,    setGone]    = useState(already);
+  // NOTE: never read localStorage during render — the server renders with no
+  // window, so an initial value derived from it desyncs server/client HTML and
+  // throws React hydration error #418 (which aborts hydration and can leave the
+  // whole page's event handlers unattached). Decide visibility after mount.
+  const [ready,   setReady]   = useState(false);
+  const [gone,    setGone]    = useState(false);
   const [started, setStarted] = useState(false);  // requires user tap to unlock AudioContext
   const [phase,   setPhase]   = useState(0);
   const [pills,   setPills]   = useState(0);
@@ -141,6 +145,12 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
   // Start animation only after user gesture (needed to unlock AudioContext on all browsers)
   const handleStart = useCallback(() => {
     setStarted(true);
+  }, []);
+
+  // Decide visibility on the client only (post-hydration) to avoid SSR mismatch.
+  useEffect(() => {
+    if (localStorage.getItem("nox_welcome_seen")) setGone(true);
+    setReady(true);
   }, []);
 
   useEffect(() => {
@@ -167,7 +177,8 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gone, started]);
 
-  if (gone) return null;
+  // Render nothing on the server and first client paint — matches, so no mismatch.
+  if (!ready || gone) return null;
 
   // ── Tap-to-begin gate (unlocks AudioContext via user gesture) ─────────────
   if (!started) {
