@@ -216,7 +216,7 @@ function MessageBubble({
             isImage || isVideo
               ? "bg-transparent p-0"
               : isOwn
-                ? "rounded-tr-sm bg-white/10 px-4 py-2.5 text-white"
+                ? "rounded-tr-sm msg-own px-4 py-2.5 text-white"
                 : "rounded-tl-sm bg-white/5 px-4 py-2.5 text-white/90"
           }`}
         >
@@ -311,7 +311,7 @@ function MessageBubble({
       {/* Context menu */}
       {menuVisible && (
         <div
-          className="fixed z-50 flex flex-col bg-[#0D0D0F] border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
+          className="fixed z-50 flex flex-col bg-nox-panel border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
           style={{ top: menuPos.y, left: menuPos.x, minWidth: showPicker ? 180 : 110 }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -745,7 +745,7 @@ export function AppLayout() {
   const callIsFloating = callActive && !callIsInline;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-white">
+    <div className="flex h-screen w-screen overflow-hidden bg-nox-bg text-white">
 
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
       {/* Mobile backdrop */}
@@ -756,7 +756,7 @@ export function AppLayout() {
         />
       )}
       <aside
-        className={`flex h-full flex-col border-r border-white/10 bg-[#0D0D0F] ${
+        className={`flex h-full flex-col border-r border-white/10 bg-nox-panel ${
           isMobile
             ? `fixed inset-y-0 left-0 z-40 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
                 mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -1015,7 +1015,7 @@ export function AppLayout() {
                     overflow: "hidden",
                     border: "1px solid rgba(255,255,255,0.12)",
                     boxShadow: "0 8px 40px rgba(0,0,0,0.65)",
-                    background: "#0D0D0F",
+                    background: "var(--nox-panel)",
                     display: "flex",
                     flexDirection: "column",
                   }
@@ -1244,7 +1244,7 @@ export function AppLayout() {
       <>
       <ResizeHandle onResize={handleRightResize} />
       <aside
-        className="flex h-full flex-col border-l border-white/10 bg-[#0D0D0F]"
+        className="flex h-full flex-col border-l border-white/10 bg-nox-panel"
         style={{ width: rightWidth, minWidth: MIN_SIDE, flexShrink: 0 }}
       >
         {view === "dm" && activeConv ? (
@@ -1320,7 +1320,7 @@ export function AppLayout() {
       {/* ── COMPOSE OVERLAY ──────────────────────────────────────────────── */}
       {composeFile && composeObjUrl && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="flex w-full max-w-lg flex-col gap-3 rounded-2xl border border-white/10 bg-[#111113] p-4 shadow-2xl">
+          <div className="flex w-full max-w-lg flex-col gap-3 rounded-2xl border border-white/10 bg-nox-surface p-4 shadow-2xl">
             {/* Preview */}
             {composeFile.type.startsWith("image/") ? (
               <img
@@ -1383,7 +1383,7 @@ export function AppLayout() {
 
       {/* ── MOBILE BOTTOM NAV ────────────────────────────────────────────── */}
       {isMobile && (
-        <nav className="fixed bottom-0 inset-x-0 z-50 flex h-[60px] items-center justify-around border-t border-white/10 bg-[#0D0D0F]">
+        <nav className="fixed bottom-0 inset-x-0 z-50 flex h-[60px] items-center justify-around border-t border-white/10 bg-nox-panel">
           {/* Channels */}
           <button
             onClick={() => { setMobileSidebarOpen(true); }}

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { applyColorTheme, COLOR_THEMES } from "@/lib/themes";
+import type { ColorTheme } from "@/lib/themes";
 
 export function PrefsInit() {
   useEffect(() => {
@@ -19,6 +21,14 @@ export function PrefsInit() {
     if (compact === "true") {
       root.style.setProperty("--nox-gap", "0.375rem");
       root.style.setProperty("--nox-padding", "0.75rem 1.5rem");
+    }
+    // Restore color theme
+    const rawTheme = localStorage.getItem("nox_color_theme");
+    if (rawTheme) {
+      try {
+        const theme = JSON.parse(rawTheme) as ColorTheme;
+        if (theme in COLOR_THEMES) applyColorTheme(theme);
+      } catch {}
     }
 
     // Register service worker for background notifications

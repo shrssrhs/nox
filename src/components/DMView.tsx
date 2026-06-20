@@ -187,7 +187,7 @@ function Bubble({
       {/* Context menu */}
       {menuVisible && (
         <div
-          className="fixed z-50 flex flex-col bg-[#0D0D0F] border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
+          className="fixed z-50 flex flex-col bg-nox-panel border border-white/10 rounded-xl p-1 shadow-2xl backdrop-blur-md"
           style={{ top: menuPos.y, left: menuPos.x, minWidth: showPicker ? 180 : 110 }}
           onClick={(e) => e.stopPropagation()}
         >

@@ -156,7 +156,7 @@ export function ChannelSettingsModal({ channelId, userId, onClose, onUpdate, onL
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
     >
-      <div className="relative flex w-full max-w-md flex-col rounded-2xl border border-white/10 bg-[#111113] shadow-2xl overflow-hidden max-h-[90vh]">
+      <div className="relative flex w-full max-w-md flex-col rounded-2xl border border-white/10 bg-nox-surface shadow-2xl overflow-hidden max-h-[90vh]">
 
         {/* Close */}
         <button

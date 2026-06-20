@@ -98,10 +98,10 @@ export function DMProfilePanel({ userId }: Props) {
             <img
               src={profile.avatar_url}
               alt=""
-              className="h-16 w-16 rounded-full border-4 border-[#0D0D0F] object-cover"
+              className="h-16 w-16 rounded-full border-4 border-nox-panel object-cover"
             />
           ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#0D0D0F] bg-zinc-800 text-xl font-bold text-white/60">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-nox-panel bg-zinc-800 text-xl font-bold text-white/60">
               {initials}
             </div>
           )}

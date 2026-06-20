@@ -82,7 +82,7 @@ export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
       onClick={(e) => e.target === overlayRef.current && onClose()}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
     >
-      <div className="group w-full max-w-[380px] rounded-2xl border border-white/10 bg-[#111113] shadow-2xl overflow-hidden relative transition-all duration-200 hover:border-white/20">
+      <div className="group w-full max-w-[380px] rounded-2xl border border-white/10 bg-nox-surface shadow-2xl overflow-hidden relative transition-all duration-200 hover:border-white/20">
 
         {/* Закрыть */}
         <button
@@ -107,14 +107,14 @@ export function UserPreviewModal({ user, onClose, onStartDM }: Props) {
         <div className="px-5 relative -mt-10 mb-3 flex items-end justify-between">
           <div className="relative">
             {user.avatar_url ? (
-              <img src={user.avatar_url} alt="" className="h-20 w-20 rounded-full object-cover border-[4px] border-[#111113]" />
+              <img src={user.avatar_url} alt="" className="h-20 w-20 rounded-full object-cover border-[4px] border-nox-surface" />
             ) : (
-              <div className="flex h-20 w-20 items-center justify-center rounded-full border-[4px] border-[#111113] bg-zinc-800 text-2xl font-bold text-white/60">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border-[4px] border-nox-surface bg-zinc-800 text-2xl font-bold text-white/60">
                 {initials}
               </div>
             )}
             {/* Статус-точка */}
-            <span className="absolute bottom-0.5 right-1 h-3.5 w-3.5 rounded-full border-2 border-[#111113] bg-green-500" />
+            <span className="absolute bottom-0.5 right-1 h-3.5 w-3.5 rounded-full border-2 border-nox-surface bg-green-500" />
           </div>
 
           {/* Все галочки юзера справа */}

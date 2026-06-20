@@ -145,7 +145,7 @@ export function FilePreview({ url, onClose }: FilePreviewProps) {
             maxHeight: "88vh",
             display: "flex",
             flexDirection: "column",
-            background: "#0D0D0F",
+            background: "var(--nox-panel)",
             border: "1px solid rgba(255,255,255,0.1)",
             borderRadius: 12,
             overflow: "hidden",

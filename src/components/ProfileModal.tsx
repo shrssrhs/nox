@@ -134,7 +134,7 @@ export function ProfileModal({ userId, onClose, onUpdate }: ProfileModalProps) {
       onClick={handleOverlay}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
     >
-      <div className="relative flex w-full max-w-md flex-col rounded-2xl border border-white/10 bg-[#111113] shadow-2xl overflow-hidden">
+      <div className="relative flex w-full max-w-md flex-col rounded-2xl border border-white/10 bg-nox-surface shadow-2xl overflow-hidden">
 
         {/* Close */}
         <button onClick={onClose} className="absolute right-4 top-4 z-10 text-white/30 hover:text-white/70 transition-colors">
@@ -183,8 +183,8 @@ export function ProfileModal({ userId, onClose, onUpdate }: ProfileModalProps) {
               <div className="absolute -top-10 left-6">
                 <div className="relative cursor-pointer group" onClick={() => avatarRef.current?.click()}>
                   {profile?.avatar_url
-                    ? <img src={profile.avatar_url} alt={name} className="h-20 w-20 rounded-full object-cover ring-4 ring-[#111113]"/>
-                    : <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-2xl font-semibold ring-4 ring-[#111113]">
+                    ? <img src={profile.avatar_url} alt={name} className="h-20 w-20 rounded-full object-cover ring-4 ring-nox-surface"/>
+                    : <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-2xl font-semibold ring-4 ring-nox-surface">
                         {name.slice(0,1).toUpperCase() || "?"}
                       </div>
                   }
@@ -192,7 +192,7 @@ export function ProfileModal({ userId, onClose, onUpdate }: ProfileModalProps) {
                     {uploadingA ? <Spinner/> : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>}
                   </div>
                   {/* Status dot */}
-                  <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#111113]">
+                  <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-nox-surface">
                     <StatusDot status={status} size={12} />
                   </span>
                 </div>

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { StatusDot } from "@/components/FEmoji";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { applyColorTheme, COLOR_THEMES } from "@/lib/themes";
+import type { ColorTheme, ThemeDef } from "@/lib/themes";
 
 const supabase = createClient();
 
@@ -24,6 +26,7 @@ export interface NoxPrefs {
   messageSound: boolean;
   compactMode: boolean;
   fontSize: "sm" | "base" | "lg";
+  colorTheme: ColorTheme;
 }
 
 export function loadPrefs(): NoxPrefs {
@@ -33,6 +36,7 @@ export function loadPrefs(): NoxPrefs {
     messageSound:    getPref("nox_message_sound", false),
     compactMode:     getPref("nox_compact_mode", false),
     fontSize:        getPref("nox_font_size", "base"),
+    colorTheme:      getPref("nox_color_theme", "default" as ColorTheme),
   };
 }
 
@@ -139,7 +143,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       }`}
     >
       <span
-        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-[#111113] shadow-lg transform transition duration-200 ${
+        className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-nox-surface shadow-lg transform transition duration-200 ${
           checked ? "translate-x-4" : "translate-x-0"
         }`}
       />
@@ -259,8 +263,8 @@ function ProfileSection({ userId, profile: initProfile, onUpdate, onProfileChang
       <div className="flex items-end gap-4 mb-6">
         <div className="relative cursor-pointer group" onClick={() => avatarRef.current?.click()}>
           {localProfile?.avatar_url
-            ? <img src={localProfile.avatar_url} alt={name} className="h-20 w-20 rounded-full object-cover ring-4 ring-[#111113]"/>
-            : <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-2xl font-semibold ring-4 ring-[#111113]">
+            ? <img src={localProfile.avatar_url} alt={name} className="h-20 w-20 rounded-full object-cover ring-4 ring-nox-surface"/>
+            : <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-2xl font-semibold ring-4 ring-nox-surface">
                 {name.slice(0,1).toUpperCase() || "?"}
               </div>
           }
@@ -271,7 +275,7 @@ function ProfileSection({ userId, profile: initProfile, onUpdate, onProfileChang
               </svg>
             )}
           </div>
-          <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#111113]">
+          <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-nox-surface">
             <StatusDot status={status} size={12}/>
           </span>
           <input ref={avatarRef} type="file" accept="image/*" className="hidden" onChange={handleAvatar}/>
@@ -390,6 +394,36 @@ function NotificationsSection({ prefs, onChange }: { prefs: NoxPrefs; onChange: 
 function AppearanceSection({ prefs, onChange }: { prefs: NoxPrefs; onChange: (k: keyof NoxPrefs, v: any) => void }) {
   return (
     <div className="space-y-4">
+      {/* Color theme */}
+      <div className="rounded-xl border border-white/5 bg-white/3 px-4 py-3.5">
+        <p className="text-sm text-white mb-3">Color theme</p>
+        <div className="grid grid-cols-3 gap-2">
+          {(Object.entries(COLOR_THEMES) as [ColorTheme, ThemeDef][]).map(([id, t]) => {
+            const active = (prefs.colorTheme ?? "default") === id;
+            return (
+              <button
+                key={id}
+                onClick={() => onChange("colorTheme", id)}
+                className={`flex flex-col items-center gap-1.5 rounded-xl border px-2 py-2.5 transition-all ${
+                  active
+                    ? "border-white/25 bg-white/10 ring-1 ring-white/20"
+                    : "border-white/5 bg-white/3 hover:bg-white/8 hover:border-white/10"
+                }`}
+              >
+                <div
+                  className="h-7 w-7 rounded-full border border-white/20 flex-shrink-0"
+                  style={{
+                    background: `radial-gradient(circle at 30% 30%, ${t.panel}, ${t.bg})`,
+                    boxShadow: `inset 0 0 0 2px ${t.surface}`,
+                  }}
+                />
+                <span className={`text-[11px] leading-none ${active ? "text-white" : "text-white/40"}`}>{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="rounded-xl border border-white/5 bg-white/3 overflow-hidden divide-y divide-white/5">
         <div className="px-4">
           <SettingsRow label="Compact mode" hint="Reduce spacing between messages">
@@ -578,6 +612,9 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
       if (sz) root.style.setProperty("--nox-font-size", sz);
       else root.style.removeProperty("--nox-font-size");
     }
+    if (key === "colorTheme") {
+      applyColorTheme(val as ColorTheme);
+    }
   }
 
   async function handleSignOut() {
@@ -621,7 +658,7 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
           }}
         >
           {/* ── LEFT: Main list ── */}
-          <div className="flex flex-col overflow-hidden bg-[#0D0D0F]" style={{ width: "50%" }}>
+          <div className="flex flex-col overflow-hidden bg-nox-panel" style={{ width: "50%" }}>
             {/* Top bar */}
             <div className="flex items-center justify-between px-5 pt-4 pb-2 flex-shrink-0">
               <h1 className="text-xl font-bold text-white">Settings</h1>
@@ -644,7 +681,7 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
                       {displayName.slice(0, 1).toUpperCase()}
                     </div>
                 }
-                <span className="absolute bottom-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#0D0D0F]">
+                <span className="absolute bottom-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-nox-panel">
                   <StatusDot status={navProfile?.status} size={13}/>
                 </span>
               </div>
@@ -689,7 +726,7 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
           </div>
 
           {/* ── RIGHT: Section content ── */}
-          <div className="flex flex-col overflow-hidden bg-[#111113]" style={{ width: "50%" }}>
+          <div className="flex flex-col overflow-hidden bg-nox-surface" style={{ width: "50%" }}>
             {/* Header */}
             <div className="flex items-center gap-1 border-b border-white/8 px-4 py-4 flex-shrink-0">
               <button
@@ -728,7 +765,7 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
   return (
     <div className="fixed inset-0 z-50 flex bg-black/60 backdrop-blur-sm settings-panel">
       {/* ── Left nav ── */}
-      <div className="flex w-64 flex-col border-r border-white/10 bg-[#0D0D0F] py-6 flex-shrink-0 settings-nav">
+      <div className="flex w-64 flex-col border-r border-white/10 bg-nox-panel py-6 flex-shrink-0 settings-nav">
         {/* Profile card */}
         <div className="px-5 mb-6">
           <div className="flex items-center gap-3">
@@ -739,7 +776,7 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
                     {(navProfile?.display_name ?? "?").slice(0,1).toUpperCase()}
                   </div>
               }
-              <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#0D0D0F]">
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-nox-panel">
                 <StatusDot status={navProfile?.status} size={10}/>
               </span>
             </div>
@@ -785,7 +822,7 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
       </div>
 
       {/* ── Content ── */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-[#111113]">
+      <div className="flex flex-1 flex-col overflow-hidden bg-nox-surface">
         {/* Section header */}
         <div className="flex items-center border-b border-white/10 px-8 py-5 flex-shrink-0">
           <h2 className="text-base font-semibold text-white">{sectionTitle}</h2>

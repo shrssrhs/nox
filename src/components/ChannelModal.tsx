@@ -141,7 +141,7 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
       onClick={(e) => e.target === overlayRef.current && onClose()}
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 backdrop-blur-sm pt-24"
     >
-      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#111113] shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-nox-surface shadow-2xl overflow-hidden">
 
         {/* Tabs */}
         <div className="flex border-b border-white/10">

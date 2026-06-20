@@ -1,15 +1,35 @@
 @import "tailwindcss";
 
+:root {
+  --nox-bg:      #09090b;
+  --nox-panel:   #0d0d0f;
+  --nox-surface: #111113;
+  --nox-own-bg:  rgba(255,255,255,0.10);
+}
+
 html,
 body {
   height: 100%;
 }
 
 body {
-  background: #09090b;
+  background: var(--nox-bg);
   color: white;
   overflow: hidden;
 }
+
+/* Theme-aware background utilities */
+.bg-nox-bg      { background-color: var(--nox-bg); }
+.bg-nox-panel   { background-color: var(--nox-panel); }
+.bg-nox-surface { background-color: var(--nox-surface); }
+
+/* Theme-aware border / ring utilities */
+.border-nox-panel   { border-color: var(--nox-panel); }
+.border-nox-surface { border-color: var(--nox-surface); }
+.ring-nox-surface   { box-shadow: 0 0 0 4px var(--nox-surface); }
+
+/* Own message bubble — colour driven by active theme */
+.msg-own { background: var(--nox-own-bg, rgba(255,255,255,0.10)); }
 
 * {
   scrollbar-width: none; /* Firefox */

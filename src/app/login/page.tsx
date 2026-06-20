@@ -17,7 +17,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#09090B]">
+    <div className="flex h-screen w-screen flex-col items-center justify-center bg-nox-bg">
       {/* Logo */}
       <div className="mb-12 text-center">
         <h1 className="text-4xl font-semibold tracking-tight text-white">Nox</h1>

@@ -44,8 +44,8 @@ export function Auth() {
   };
 
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-[#09090B] text-white p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0D0D0F] p-6 shadow-xl">
+    <div className="flex h-screen w-screen items-center justify-center bg-nox-bg text-white p-4">
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-nox-panel p-6 shadow-xl">
         <h2 className="text-xl font-semibold tracking-tight text-center mb-6">
           {isSignUp ? "Создать аккаунт Nox" : "Войти в Nox"}
         </h2>
