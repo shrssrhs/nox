@@ -26,6 +26,7 @@ export async function middleware(request: NextRequest) {
   console.log("middleware:", request.nextUrl.pathname, "user:", user?.id ?? "none");
 
   const isPublicPath =
+    request.nextUrl.pathname === "/" ||            // landing page (renders app once logged in)
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/auth");
 
