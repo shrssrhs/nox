@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DemoButton } from "@/components/DemoButton";
 
 // ─── Brand mark ───────────────────────────────────────────────────────────────
 function Logo({ size = 36 }: { size?: number }) {
@@ -145,12 +146,7 @@ export function Landing() {
             >
               Create your space — it&apos;s free
             </Link>
-            <Link
-              href="/login"
-              className="rounded-xl border border-white/12 px-7 py-3.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/5 hover:text-white"
-            >
-              Sign in
-            </Link>
+            <DemoButton className="rounded-xl border border-white/12 px-7 py-3.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-60" />
           </div>
 
           <div className="mt-16 flex w-full justify-center">
