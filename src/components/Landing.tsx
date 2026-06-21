@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { DemoButton } from "@/components/DemoButton";
 
-// ─── Brand mark ───────────────────────────────────────────────────────────────
+// ─── Brand mark (monochrome, matches the app) ─────────────────────────────────
 function Logo({ size = 36 }: { size?: number }) {
   return (
     <div
@@ -9,9 +9,9 @@ function Logo({ size = 36 }: { size?: number }) {
       style={{
         width: size,
         height: size,
-        background: "linear-gradient(145deg,#1e1b4b 0%,#3730a3 60%,#1e1b4b 100%)",
-        border: "1px solid rgba(167,139,250,0.25)",
-        boxShadow: "0 0 24px rgba(124,58,237,0.25)",
+        background: "linear-gradient(145deg,#1a1a1d 0%,#242428 55%,#161618 100%)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        boxShadow: "0 0 24px rgba(255,255,255,0.06)",
       }}
     >
       <span className="font-black text-white" style={{ fontSize: size * 0.5 }}>N</span>
@@ -41,13 +41,13 @@ function AppPreview() {
           </div>
           <div className="mb-1 flex flex-col gap-1 rounded-md px-2 py-1.5 text-[10px] text-white/45">
             <span><span className="opacity-40">#</span> hangout</span>
-            {/* call presence stack */}
+            {/* call presence stack — green dot is the app's "active" signal */}
             <span className="flex items-center gap-1 pl-2">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               <span className="flex">
-                <span className="h-3 w-3 rounded-full bg-violet-400/70 ring-2 ring-[#0d0d10]" />
-                <span className="-ml-1 h-3 w-3 rounded-full bg-sky-400/70 ring-2 ring-[#0d0d10]" />
-                <span className="-ml-1 h-3 w-3 rounded-full bg-pink-400/70 ring-2 ring-[#0d0d10]" />
+                <span className="h-3 w-3 rounded-full bg-white/45 ring-2 ring-[#0d0d10]" />
+                <span className="-ml-1 h-3 w-3 rounded-full bg-white/30 ring-2 ring-[#0d0d10]" />
+                <span className="-ml-1 h-3 w-3 rounded-full bg-white/20 ring-2 ring-[#0d0d10]" />
               </span>
             </span>
           </div>
@@ -60,7 +60,7 @@ function AppPreview() {
             <span className="rounded-2xl rounded-tl-sm bg-white/5 px-3 py-1.5 text-[10px] text-white/80">welcome to our space 👋</span>
           </div>
           <div className="flex items-start justify-end gap-2">
-            <span className="rounded-2xl rounded-tr-sm bg-violet-500/20 px-3 py-1.5 text-[10px] text-white">finally, somewhere that's *ours*</span>
+            <span className="rounded-2xl rounded-tr-sm bg-white/12 px-3 py-1.5 text-[10px] text-white">finally, somewhere that&apos;s *ours*</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="mt-0.5 h-5 w-5 flex-shrink-0 rounded-full bg-white/10" />
@@ -76,7 +76,7 @@ function AppPreview() {
 function Feature({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   return (
     <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-6">
-      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-violet-300">
+      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-white/70">
         {icon}
       </div>
       <h3 className="mb-1.5 text-base font-semibold text-white">{title}</h3>
@@ -85,14 +85,14 @@ function Feature({ icon, title, body }: { icon: React.ReactNode; title: string; 
   );
 }
 
-// ─── Landing page ─────────────────────────────────────────────────────────────
+// ─── Landing page (monochrome — matches the messenger) ────────────────────────
 export function Landing() {
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden" style={{ background: "#09090b" }}>
-      {/* ambient glow */}
+      {/* ambient glow — soft white, not a colour */}
       <div
         className="pointer-events-none absolute left-1/2 top-0 -z-0 h-[420px] w-[820px] -translate-x-1/2 blur-[120px]"
-        style={{ background: "radial-gradient(ellipse at center, rgba(124,58,237,0.22), transparent 70%)" }}
+        style={{ background: "radial-gradient(ellipse at center, rgba(255,255,255,0.06), transparent 70%)" }}
       />
 
       <div className="relative z-10 mx-auto max-w-5xl px-6">
@@ -115,13 +115,11 @@ export function Landing() {
           <span className="mb-6 rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-xs font-medium tracking-wide text-white/50">
             Your space. Your people.
           </span>
-          <h1
-            className="max-w-3xl text-[clamp(38px,7vw,68px)] font-black leading-[1.05] tracking-tight text-white"
-          >
+          <h1 className="max-w-3xl text-[clamp(38px,7vw,68px)] font-black leading-[1.05] tracking-tight text-white">
             A home for{" "}
             <span
               style={{
-                background: "linear-gradient(90deg,#c4b5fd,#818cf8,#60a5fa)",
+                background: "linear-gradient(90deg,#ffffff,#a1a1aa)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
@@ -138,15 +136,11 @@ export function Landing() {
           <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
             <Link
               href="/login"
-              className="rounded-xl px-7 py-3.5 text-sm font-semibold text-white transition-transform hover:scale-[1.03]"
-              style={{
-                background: "linear-gradient(145deg,#4338ca,#6d28d9)",
-                boxShadow: "0 8px 30px rgba(109,40,217,0.4)",
-              }}
+              className="rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-black transition-transform hover:scale-[1.03]"
             >
               Create your space — it&apos;s free
             </Link>
-            <DemoButton className="rounded-xl border border-white/12 px-7 py-3.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-60" />
+            <DemoButton className="rounded-xl border border-white/15 px-7 py-3.5 text-sm font-semibold text-white/70 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-60" />
           </div>
 
           <div className="mt-16 flex w-full justify-center">
@@ -205,11 +199,7 @@ export function Landing() {
           </p>
           <Link
             href="/login"
-            className="mt-8 rounded-xl px-7 py-3.5 text-sm font-semibold text-white transition-transform hover:scale-[1.03]"
-            style={{
-              background: "linear-gradient(145deg,#4338ca,#6d28d9)",
-              boxShadow: "0 8px 30px rgba(109,40,217,0.4)",
-            }}
+            className="mt-8 rounded-xl bg-white px-7 py-3.5 text-sm font-semibold text-black transition-transform hover:scale-[1.03]"
           >
             Get started
           </Link>

@@ -65,7 +65,7 @@ function useAudio() {
 }
 
 // ─── Particle canvas ──────────────────────────────────────────────────────────
-const P_COLORS = ["#a78bfa","#818cf8","#7c3aed","#60a5fa","#38bdf8","#c4b5fd","#93c5fd","#fff"];
+const P_COLORS = ["#ffffff","#f3f4f6","#e5e7eb","#d1d5db","#cbd5e1","#ffffff","#e2e8f0","#fff"];
 
 function runParticles(canvas: HTMLCanvasElement, onDone: () => void) {
   const ctx = canvas.getContext("2d");
@@ -192,9 +192,9 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
         <div
           className="flex h-24 w-24 items-center justify-center rounded-[28px]"
           style={{
-            background: "linear-gradient(145deg, #1e1b4b 0%, #3730a3 60%, #1e1b4b 100%)",
-            border: "1px solid rgba(167,139,250,0.2)",
-            boxShadow: "0 0 60px #7c3aed38",
+            background: "linear-gradient(145deg, #1a1a1d 0%, #242428 60%, #161618 100%)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxShadow: "0 0 60px rgba(255,255,255,0.10)",
             animation: "nox-pulse-dot 2.5s ease-in-out infinite",
           }}
         >
@@ -239,7 +239,7 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
           className="absolute rounded-full blur-3xl"
           style={{
             width: 280, height: 280,
-            background: "radial-gradient(circle, #7c3aed88 0%, #3b82f655 40%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 40%, transparent 70%)",
             opacity: phase >= 1 ? 1 : 0,
             transition: "opacity 1.2s ease",
           }}
@@ -250,21 +250,21 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
           <div
             className="flex h-24 w-24 items-center justify-center rounded-[28px]"
             style={{
-              background: "linear-gradient(145deg, #1e1b4b 0%, #3730a3 60%, #1e1b4b 100%)",
-              border: "1px solid rgba(167,139,250,0.25)",
-              boxShadow: "0 0 80px #7c3aed50, 0 0 180px #7c3aed28, inset 0 1px 0 rgba(255,255,255,0.1)",
+              background: "linear-gradient(145deg, #1a1a1d 0%, #242428 60%, #161618 100%)",
+              border: "1px solid rgba(255,255,255,0.16)",
+              boxShadow: "0 0 80px rgba(255,255,255,0.14), 0 0 180px rgba(255,255,255,0.06), inset 0 1px 0 rgba(255,255,255,0.1)",
             }}
           >
             <span
               className="text-5xl font-black text-white"
-              style={{ fontFamily: "var(--font-geist-sans)", textShadow: "0 0 30px #a78bfa" }}
+              style={{ fontFamily: "var(--font-geist-sans)", textShadow: "0 0 30px rgba(255,255,255,0.6)" }}
             >
               N
             </span>
           </div>
           <span
             className="text-[44px] font-black tracking-[0.25em] text-white"
-            style={{ fontFamily: "var(--font-geist-sans)", textShadow: "0 0 40px rgba(167,139,250,0.4)" }}
+            style={{ fontFamily: "var(--font-geist-sans)", textShadow: "0 0 40px rgba(255,255,255,0.25)" }}
           >
             NOX
           </span>
@@ -328,7 +328,7 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
         <h1
           className="text-[clamp(52px,12vw,112px)] font-black leading-none"
           style={{
-            background: "linear-gradient(90deg,#c4b5fd,#818cf8,#60a5fa,#38bdf8,#c4b5fd)",
+            background: "linear-gradient(90deg,#ffffff,#9ca3af,#ffffff,#d1d5db,#ffffff)",
             backgroundSize: "200% auto",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
@@ -346,7 +346,7 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
           {[0, 1, 2].map(i => (
             <div
               key={i}
-              className="h-1.5 w-1.5 rounded-full bg-violet-400/50"
+              className="h-1.5 w-1.5 rounded-full bg-white/40"
               style={{ animation: `nox-pulse-dot 1.6s ease-in-out ${i * 0.35}s infinite` }}
             />
           ))}
