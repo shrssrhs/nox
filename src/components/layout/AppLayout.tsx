@@ -546,11 +546,14 @@ export function AppLayout() {
   const [channelModalOpen, setChannelModalOpen] = useState(false);
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
   
+  const [isAnon, setIsAnon] = useState(false);
+
   useEffect(() => {
     async function initUser() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setUserId(user.id);
+      setIsAnon(!!user.is_anonymous);
 
       const { data } = await supabase
         .from("profiles")
@@ -591,19 +594,52 @@ export function AppLayout() {
     async function loadChannels() {
       const list = await fetchUserChannels(supabase, userId!);
 
-      if (list.length === 0) {
+      if (list.length > 0) {
+        setChannels(list);
+        setActiveChannel(list[0]);
+        return;
+      }
+
+      // No channels yet. Anonymous "Try the demo" visitors get an auto-provisioned
+      // sandbox channel instead of the create-channel modal — no DB setup needed.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.is_anonymous) {
+        await provisionDemoSandbox(userId!);
+      } else {
         setChannels([]);
+        setChannelModalOpen(true);
+      }
+    }
+
+    async function provisionDemoSandbox(uid: string) {
+      const primary = await supabase
+        .from("channels")
+        .insert({ name: "demo-lounge", description: "Your private sandbox — try anything here ✨", created_by: uid })
+        .select("id, name, description")
+        .single();
+
+      let ch = primary.data as { id: string; name: string; description: string | null } | null;
+      if (!ch) {
+        const fallback = await supabase
+          .from("channels")
+          .insert({ name: "demo-lounge", created_by: uid })
+          .select("id, name")
+          .single();
+        const f = fallback.data as { id: string; name: string } | null;
+        if (f) ch = { ...f, description: null };
+      }
+
+      if (!ch) {
         setChannelModalOpen(true);
         return;
       }
 
-      setChannels(list);
-
-      if (list.length > 0) {
-        setActiveChannel(list[0]);
-      }
+      await supabase.from("channel_members").insert({ channel_id: ch.id, user_id: uid });
+      const channel: Channel = { id: ch.id, name: ch.name, description: ch.description, created_by: uid };
+      setChannels([channel]);
+      setActiveChannel(channel);
     }
-  
+
     loadChannels();
   }, [userId]); // <-- Добавили userId в зависимости, чтобы код перезапускался при входе пользователя
 
@@ -974,6 +1010,21 @@ export function AppLayout() {
               otherUser={activeConv.other_user}
             />
           </>
+        )}
+
+        {/* Demo-mode banner (anonymous "Try the demo" visitors) */}
+        {isAnon && (
+          <div className="flex items-center justify-between gap-3 border-b border-violet-400/15 bg-violet-500/[0.07] px-4 py-2 md:px-6">
+            <span className="text-xs text-violet-200/80">
+              🧪 You&apos;re in demo mode — this space is temporary.
+            </span>
+            <a
+              href="/login"
+              className="flex-shrink-0 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20"
+            >
+              Sign up to keep it
+            </a>
+          </div>
         )}
 
         {/* Channel header */}
