@@ -22,12 +22,15 @@ import { useReactions } from "@/hooks/useReactions";
 import type { ReactionGroup } from "@/hooks/useReactions";
 import { useTyping } from "@/hooks/useTyping";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useCallPresence } from "@/hooks/useCallPresence";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Channel {
   id: string;
   name: string;
   description: string | null;
+  mode?: "open" | "owner_only" | null;
+  created_by?: string | null;
 }
 
 interface Profile {
@@ -90,6 +93,43 @@ function Avatar({ name, url, size = 8 }: { name: string | null; url?: string | n
   const style = { width: size * 4, height: size * 4, flexShrink: 0 as const };
   if (url) return <img src={url} alt={name ?? ""} className={`${cls} object-cover`} style={style} />;
   return <div className={cls} style={style}>{initials}</div>;
+}
+
+// ─── Call presence avatar stack (Discord-style "who's in the call") ───────────
+function CallAvatars({
+  participants,
+  max = 3,
+}: {
+  participants: { userId: string; displayName: string; avatarUrl: string | null }[];
+  max?: number;
+}) {
+  if (participants.length === 0) return null;
+  const shown = participants.slice(0, max);
+  const extra = participants.length - shown.length;
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="flex h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" />
+      <span className="flex items-center">
+        {shown.map((p, i) => (
+          <span
+            key={p.userId}
+            title={p.displayName}
+            className="overflow-hidden rounded-full ring-2 ring-[#0d0d10]"
+            style={{ marginLeft: i === 0 ? 0 : -6, width: 16, height: 16 }}
+          >
+            {p.avatarUrl ? (
+              <img src={p.avatarUrl} alt={p.displayName} className="h-full w-full object-cover" />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center bg-emerald-500/30 text-[8px] font-semibold text-white">
+                {(p.displayName ?? "?").slice(0, 1).toUpperCase()}
+              </span>
+            )}
+          </span>
+        ))}
+      </span>
+      {extra > 0 && <span className="text-[10px] font-medium text-emerald-300/80">+{extra}</span>}
+    </span>
+  );
 }
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
@@ -744,6 +784,20 @@ export function AppLayout() {
     activeChannel?.id === callChannelId;
   const callIsFloating = callActive && !callIsInline;
 
+  // Discord-style "who's in the call" presence, grouped by channel.
+  const callPresence = useCallPresence(
+    userId && profile
+      ? { userId, displayName: profile.display_name ?? "Someone", avatarUrl: profile.avatar_url }
+      : null,
+    callActive ? callChannelId : null
+  );
+
+  // Owner-only channels: hide the composer for everyone except the creator.
+  const canPostInActiveChannel =
+    !activeChannel ||
+    activeChannel.mode !== "owner_only" ||
+    activeChannel.created_by === userId;
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-white">
 
@@ -787,16 +841,23 @@ export function AppLayout() {
             <button
               key={ch.id}
               onClick={() => { setActiveChannel(ch); setActiveConv(null); setView("channel"); markRead(ch.id); if (isMobile) setMobileSidebarOpen(false); }}
-              className={`mb-0.5 w-full rounded-lg px-3 py-2 text-left text-sm transition-colors flex items-center justify-between ${
+              className={`mb-0.5 flex w-full flex-col gap-1 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 view === "channel" && activeChannel?.id === ch.id
                   ? "bg-white/10 text-white"
                   : "text-white/50 hover:bg-white/5 hover:text-white"
               }`}
             >
-              <span><span className="mr-2 opacity-40">#</span>{ch.name}</span>
-              {!!unread[ch.id] && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white/20 px-1 text-[10px] font-bold text-white">
-                  {unread[ch.id] > 99 ? "99+" : unread[ch.id]}
+              <span className="flex w-full items-center justify-between">
+                <span><span className="mr-2 opacity-40">#</span>{ch.name}</span>
+                {!!unread[ch.id] && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white/20 px-1 text-[10px] font-bold text-white">
+                    {unread[ch.id] > 99 ? "99+" : unread[ch.id]}
+                  </span>
+                )}
+              </span>
+              {(callPresence.get(ch.id)?.length ?? 0) > 0 && (
+                <span className="pl-4">
+                  <CallAvatars participants={callPresence.get(ch.id)!} />
                 </span>
               )}
             </button>
@@ -1167,11 +1228,12 @@ export function AppLayout() {
               >✕</button>
             </div>
           )}
+          {canPostInActiveChannel ? (<>
           <div className="flex items-end gap-3 p-4">
-                
-            <input 
-              type="file" 
-              ref={fileInputRef} 
+
+            <input
+              type="file"
+              ref={fileInputRef}
               onChange={handleFileUpload} 
               className="hidden" 
               accept="image/*,video/*,application/*"
@@ -1227,6 +1289,14 @@ export function AppLayout() {
           <p className="mt-1 pl-1 text-[11px] text-white/20">
             Enter to send · Shift+Enter for new line · Click 📎 to share media
           </p>
+          </>) : (
+            <div className="flex items-center justify-center gap-2 px-4 py-5 text-sm text-white/40">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              Only the channel owner can post here
+            </div>
+          )}
         </div>
         </>)}
 
