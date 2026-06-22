@@ -52,3 +52,49 @@ body {
 .settings-panel   { animation: settings-in     0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .settings-nav     { animation: settings-nav-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .settings-section { animation: section-in      0.18s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* ─── Landing: premium 3D scene (monochrome) ──────────────────────────────────
+   JS writes --mx/--my (pointer, -1..1) and --sy (scrollY px) on .nox-landing;
+   layers read them via calc() so the browser animates on the compositor. */
+.nox-landing { --mx: 0; --my: 0; --sy: 0; }
+
+/* film grain */
+.nox-grain {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: 0.045;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* blurred parallax light orbs */
+.nox-orb { position: absolute; border-radius: 9999px; filter: blur(90px); pointer-events: none; will-change: transform; }
+
+/* 3D stage that tilts toward the cursor and reclines as you scroll */
+.nox-scene { perspective: 1500px; }
+.nox-stage {
+  transform-style: preserve-3d;
+  transform: rotateY(calc(var(--mx) * 7deg)) rotateX(calc(var(--my) * -6deg + var(--sy) * 0.008deg));
+  will-change: transform;
+}
+.nox-layer { transform-style: preserve-3d; will-change: transform; }
+
+/* scroll reveal */
+.nox-reveal { opacity: 0; transform: translateY(34px); transition: opacity .9s cubic-bezier(.16,1,.3,1), transform .9s cubic-bezier(.16,1,.3,1); }
+.nox-reveal.in { opacity: 1; transform: none; }
+.nox-reveal.d1 { transition-delay: .08s; }
+.nox-reveal.d2 { transition-delay: .16s; }
+.nox-reveal.d3 { transition-delay: .24s; }
+
+/* cursor-tilt cards */
+.nox-tilt { transform-style: preserve-3d; transition: transform .35s cubic-bezier(.16,1,.3,1), border-color .35s ease, background .35s ease; }
+
+/* slow auto-rotating wireframe ring */
+@keyframes nox-spin-slow { to { transform: rotate(360deg); } }
+.nox-ring { animation: nox-spin-slow 46s linear infinite; }
+
+/* shimmer sweep on the wordmark */
+@keyframes nox-shimmer { 0% { background-position: 200% center; } 100% { background-position: -200% center; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .nox-stage, .nox-layer, .nox-orb, .nox-ring { transform: none !important; animation: none !important; }
+  .nox-reveal { opacity: 1 !important; transform: none !important; }
+}
