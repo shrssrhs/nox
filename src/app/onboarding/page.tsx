@@ -13,10 +13,15 @@ export default async function OnboardingPage() {
   const { step, displayName } = await resolveOnboardingStep(supabase, user.id);
   if (step === "done") redirect("/");
 
+  // Username-signups carry their handle in metadata; GitHub users don't (they
+  // can pick one here). A locked username is the login credential — read-only.
+  const meta = (user.user_metadata ?? {}) as { username?: string };
+
   return (
     <Onboarding
       initialStep={step}
-      email={user.email ?? ""}
+      username={meta.username ?? ""}
+      usernameLocked={Boolean(meta.username)}
       initialName={displayName ?? ""}
     />
   );

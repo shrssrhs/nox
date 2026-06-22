@@ -2,46 +2,57 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
+import { isValidUsername, normalizeUsername, usernameToEmail } from "@/lib/auth/username";
 
 type Mode = "signin" | "signup";
 
 export default function LoginPage() {
   const supabase = createClient();
   const [mode, setMode] = useState<Mode>("signin");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<"email" | "github" | null>(null);
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [loading, setLoading] = useState<"creds" | "github" | null>(null);
 
   const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL ?? (typeof window !== "undefined" ? window.location.origin : "")}/auth/callback`;
 
-  async function handleEmail(e: React.FormEvent) {
+  async function handleCreds(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setLoading("email");
+
+    const uname = normalizeUsername(username);
+    if (!isValidUsername(uname)) {
+      setError("Юзернейм: 3–20 символов, латиница, цифры и _");
+      return;
+    }
+
+    setLoading("creds");
+    const email = usernameToEmail(uname);
     try {
       if (mode === "signup") {
         const { data, error: err } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: redirectTo },
+          options: { data: { username: uname } },
         });
         if (err) throw err;
-        // Email confirmation is required → no session yet.
         if (!data.session) {
-          setSentTo(email);
+          // Should not happen once "Confirm email" is OFF in the dashboard.
+          setError("Регистрация требует подтверждения почты — отключите Confirm email в Supabase.");
           return;
         }
         window.location.href = "/";
       } else {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) throw err;
-        // Server gating routes to /onboarding (profile / 2FA) or the app.
         window.location.href = "/";
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Что-то пошло не так");
+      const msg = err instanceof Error ? err.message : "Что-то пошло не так";
+      // Friendlier copy for the two common cases.
+      if (/already registered/i.test(msg)) setError("Этот юзернейм уже занят");
+      else if (/invalid login credentials/i.test(msg)) setError("Неверный юзернейм или пароль");
+      else setError(msg);
     } finally {
       setLoading(null);
     }
@@ -52,45 +63,24 @@ export default function LoginPage() {
     await supabase.auth.signInWithOAuth({ provider: "github", options: { redirectTo } });
   }
 
-  // ── Email-sent confirmation screen ──────────────────────────────────────────
-  if (sentTo) {
-    return (
-      <Shell>
-        <div className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-500/15 text-2xl">
-            ✉️
-          </div>
-          <h2 className="mb-2 text-lg font-medium text-white">Проверьте почту</h2>
-          <p className="text-sm text-white/50">
-            Мы отправили ссылку для подтверждения на<br />
-            <span className="text-white/80">{sentTo}</span>
-          </p>
-          <button
-            onClick={() => { setSentTo(null); setMode("signin"); }}
-            className="mt-6 text-xs text-white/40 transition-colors hover:text-white"
-          >
-            Назад ко входу
-          </button>
-        </div>
-      </Shell>
-    );
-  }
-
   return (
     <Shell>
       <h2 className="mb-6 text-center text-lg font-medium text-white">
         {mode === "signup" ? "Создать аккаунт" : "С возвращением"}
       </h2>
 
-      <form onSubmit={handleEmail} className="flex flex-col gap-3">
+      <form onSubmit={handleCreds} className="flex flex-col gap-3">
         <div>
-          <label className="mb-1 block text-xs text-white/50">Email</label>
+          <label className="mb-1 block text-xs text-white/50">Юзернейм</label>
           <input
-            type="email"
+            type="text"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            value={username}
+            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+            placeholder="alex"
             className={inputCls}
           />
         </div>
@@ -114,7 +104,7 @@ export default function LoginPage() {
           disabled={loading !== null}
           className="mt-1 w-full rounded-xl bg-white py-2.5 text-sm font-medium text-black transition-colors hover:bg-white/90 disabled:opacity-50"
         >
-          {loading === "email"
+          {loading === "creds"
             ? "Секунду…"
             : mode === "signup"
             ? "Зарегистрироваться"

@@ -3,16 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OnboardingStep } from "@/lib/auth/onboarding";
+import { isValidUsername, normalizeUsername } from "@/lib/auth/username";
 
 type Step = Exclude<OnboardingStep, "done">;
 
 export function Onboarding({
   initialStep,
-  email,
+  username: initialUsername,
+  usernameLocked,
   initialName,
 }: {
   initialStep: Step;
-  email: string;
+  username: string;
+  usernameLocked: boolean;
   initialName: string;
 }) {
   const supabase = createClient();
@@ -22,7 +25,7 @@ export function Onboarding({
 
   // Profile step
   const [name, setName] = useState(initialName);
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(initialUsername);
 
   // MFA state
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -33,12 +36,19 @@ export function Onboarding({
   // ── Profile ────────────────────────────────────────────────────────────────
   async function saveProfile() {
     if (!name.trim()) { setError("Введите имя"); return; }
+    // Locked usernames come from signup and are already valid. GitHub users may
+    // optionally pick one here.
+    const uname = usernameLocked ? initialUsername : normalizeUsername(username);
+    if (!usernameLocked && uname && !isValidUsername(uname)) {
+      setError("Юзернейм: 3–20 символов, латиница, цифры и _");
+      return;
+    }
     setBusy(true); setError(null);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setError("Сессия истекла, войдите снова"); setBusy(false); return; }
     const { error: upErr } = await supabase
       .from("profiles")
-      .update({ display_name: name.trim(), username: username.trim() || null })
+      .update({ display_name: name.trim(), username: uname || null })
       .eq("id", user.id);
     if (upErr) { setError(upErr.message); setBusy(false); return; }
 
@@ -108,7 +118,9 @@ export function Onboarding({
         {step === "profile" && (
           <>
             <h2 className="mb-1 text-center text-lg font-medium">Настройте профиль</h2>
-            <p className="mb-6 text-center text-xs text-white/40">{email}</p>
+            <p className="mb-6 text-center text-xs text-white/40">
+              {usernameLocked ? `@${initialUsername}` : "Последний штрих"}
+            </p>
             <div className="flex flex-col gap-4">
               <Field label="Имя в чате">
                 <input
@@ -119,14 +131,23 @@ export function Onboarding({
                   className={inputCls}
                 />
               </Field>
-              <Field label="Юзернейм (необязательно)">
-                <input
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value.replace(/\s/g, ""))}
-                  placeholder="alex"
-                  className={inputCls}
-                />
-              </Field>
+              {usernameLocked ? (
+                <Field label="Юзернейм (для входа)">
+                  <input value={`@${initialUsername}`} readOnly disabled className={`${inputCls} opacity-50`} />
+                </Field>
+              ) : (
+                <Field label="Юзернейм (необязательно)">
+                  <input
+                    value={username}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    placeholder="alex"
+                    className={inputCls}
+                  />
+                </Field>
+              )}
               {error && <ErrorBox>{error}</ErrorBox>}
               <PrimaryButton onClick={saveProfile} disabled={busy}>
                 {busy ? "Сохраняем…" : "Продолжить"}
