@@ -7,6 +7,9 @@ import { isValidUsername, normalizeUsername } from "@/lib/auth/username";
 
 type Step = Exclude<OnboardingStep, "done">;
 
+// Keeps the in-progress TOTP enrolment stable across page reloads.
+const PENDING_MFA_KEY = "nox_pending_mfa";
+
 export function Onboarding({
   initialStep,
   username: initialUsername,
@@ -63,11 +66,30 @@ export function Onboarding({
     setStep(hasVerified ? "mfa-challenge" : "mfa-enroll");
   }
 
-  // ── Enrol a fresh TOTP factor ────────────────────────────────────────────────
+  // ── Enrol a TOTP factor ──────────────────────────────────────────────────────
+  // The QR/secret can only be read once, at enrol time. If we re-enrolled on
+  // every mount, a reload would silently swap the secret and any code from the
+  // already-scanned QR would read as "invalid". So we persist the pending
+  // enrolment for this session and reuse it across reloads.
   const startEnroll = useCallback(async () => {
     setError(null);
-    // Drop any half-finished factors so enrol never collides.
     const { data: factors } = await supabase.auth.mfa.listFactors();
+
+    // Reuse a still-pending enrolment from a previous reload → same QR/secret.
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(PENDING_MFA_KEY) || "null");
+      const stillPending =
+        saved?.factorId &&
+        (factors?.all ?? []).some((f) => f.id === saved.factorId && f.status === "unverified");
+      if (stillPending) {
+        setFactorId(saved.factorId);
+        setQr(saved.qr);
+        setSecret(saved.secret);
+        return;
+      }
+    } catch { /* ignore corrupt storage */ }
+
+    // No reusable factor → clear stale unverified ones and enrol fresh.
     for (const f of factors?.all ?? []) {
       if (f.status === "unverified") await supabase.auth.mfa.unenroll({ factorId: f.id });
     }
@@ -76,6 +98,12 @@ export function Onboarding({
     setFactorId(data.id);
     setQr(data.totp.qr_code);
     setSecret(data.totp.secret);
+    try {
+      sessionStorage.setItem(
+        PENDING_MFA_KEY,
+        JSON.stringify({ factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret })
+      );
+    } catch { /* storage unavailable — non-fatal */ }
   }, [supabase]);
 
   // ── Pick the verified factor for a returning-user challenge ──────────────────
@@ -111,12 +139,15 @@ export function Onboarding({
       factorId, challengeId: ch.id, code: code.trim(),
     });
     if (vErr) { setError("Неверный код. Попробуйте ещё раз."); setBusy(false); return; }
-    // Session is now aal2 — full nav so server gating sees the elevated cookie.
+    // Verified → drop the pending-enrolment cache. Session is now aal2; full nav
+    // so server gating sees the elevated cookie.
+    try { sessionStorage.removeItem(PENDING_MFA_KEY); } catch { /* noop */ }
     window.location.href = "/";
   }
 
   // Escape hatch: onboarding is mandatory, so the only way out is to sign out.
   async function signOutAndLeave() {
+    try { sessionStorage.removeItem(PENDING_MFA_KEY); } catch { /* noop */ }
     await supabase.auth.signOut();
     window.location.href = "/";
   }
