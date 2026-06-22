@@ -486,18 +486,155 @@ function AudioVideoSection() {
   );
 }
 
+const acctInput =
+  "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/20";
+
 function AccountSection({ email, onSignOut }: { email: string | null; onSignOut: () => void }) {
+  const [newEmail, setNewEmail]       = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [busy, setBusy]               = useState<null | "email" | "password" | "2fa">(null);
+  const [msg, setMsg]                 = useState<{ k: "ok" | "err"; t: string } | null>(null);
+
+  // 2FA
+  const [has2fa, setHas2fa]       = useState<boolean | null>(null);
+  const [verifiedId, setVerifiedId] = useState<string | null>(null);
+  const [qr, setQr]               = useState<string | null>(null);
+  const [secret, setSecret]       = useState<string | null>(null);
+  const [enrollId, setEnrollId]   = useState<string | null>(null);
+  const [code, setCode]           = useState("");
+
+  useEffect(() => { void refresh2fa(); }, []);
+  async function refresh2fa() {
+    const { data } = await supabase.auth.mfa.listFactors();
+    const v = (data?.totp ?? []).find((f) => f.status === "verified");
+    setHas2fa(Boolean(v));
+    setVerifiedId(v?.id ?? null);
+  }
+
+  async function changeEmail() {
+    if (!/.+@.+\..+/.test(newEmail)) { setMsg({ k: "err", t: "Введите корректную почту" }); return; }
+    setBusy("email"); setMsg(null);
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim().toLowerCase() });
+    setBusy(null);
+    if (error) { setMsg({ k: "err", t: error.message }); return; }
+    setMsg({ k: "ok", t: "Проверьте новую почту — там ссылка для подтверждения." });
+    setNewEmail("");
+  }
+
+  async function changePassword() {
+    if (newPassword.length < 6) { setMsg({ k: "err", t: "Пароль минимум 6 символов" }); return; }
+    setBusy("password"); setMsg(null);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setBusy(null);
+    if (error) { setMsg({ k: "err", t: error.message }); return; }
+    setMsg({ k: "ok", t: "Пароль обновлён." });
+    setNewPassword("");
+  }
+
+  async function enable2fa() {
+    setMsg(null);
+    const { data: factors } = await supabase.auth.mfa.listFactors();
+    for (const f of factors?.all ?? []) {
+      if (f.status === "unverified") await supabase.auth.mfa.unenroll({ factorId: f.id });
+    }
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+    if (error || !data) { setMsg({ k: "err", t: error?.message ?? "Не удалось включить 2FA" }); return; }
+    setEnrollId(data.id); setQr(data.totp.qr_code); setSecret(data.totp.secret);
+  }
+
+  async function confirm2fa() {
+    if (!enrollId || code.trim().length < 6) { setMsg({ k: "err", t: "Введите 6-значный код" }); return; }
+    setBusy("2fa"); setMsg(null);
+    const { data: ch, error: cErr } = await supabase.auth.mfa.challenge({ factorId: enrollId });
+    if (cErr || !ch) { setBusy(null); setMsg({ k: "err", t: cErr?.message ?? "Ошибка" }); return; }
+    const { error: vErr } = await supabase.auth.mfa.verify({ factorId: enrollId, challengeId: ch.id, code: code.trim() });
+    setBusy(null);
+    if (vErr) { setMsg({ k: "err", t: "Неверный код. Попробуйте ещё раз." }); return; }
+    setQr(null); setSecret(null); setEnrollId(null); setCode("");
+    setMsg({ k: "ok", t: "2FA включена." });
+    void refresh2fa();
+  }
+
+  async function disable2fa() {
+    if (!verifiedId) return;
+    setBusy("2fa"); setMsg(null);
+    const { error } = await supabase.auth.mfa.unenroll({ factorId: verifiedId });
+    setBusy(null);
+    if (error) { setMsg({ k: "err", t: error.message }); return; }
+    setMsg({ k: "ok", t: "2FA отключена." });
+    void refresh2fa();
+  }
+
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-white/5 bg-white/3 overflow-hidden divide-y divide-white/5">
-        <div className="px-4 py-3.5">
-          <p className="text-xs text-white/40 mb-1">Email</p>
-          <p className="text-sm text-white">{email ?? "—"}</p>
+      {msg && (
+        <p className={`rounded-lg p-3 text-xs ${msg.k === "ok" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+          {msg.t}
+        </p>
+      )}
+
+      {/* Current login email */}
+      <div className="rounded-xl border border-white/5 bg-white/3 px-4 py-3.5">
+        <p className="text-xs text-white/40 mb-1">Текущая почта</p>
+        <p className="text-sm text-white break-all">{email ?? "—"}</p>
+      </div>
+
+      {/* Change email */}
+      <div className="rounded-xl border border-white/5 bg-white/3 px-4 py-3.5 space-y-2">
+        <p className="text-xs text-white/40">Сменить почту</p>
+        <input type="email" value={newEmail} placeholder="you@mail.com"
+          autoCapitalize="none" autoCorrect="off" spellCheck={false}
+          onChange={(e) => setNewEmail(e.target.value)} className={acctInput} />
+        <button onClick={changeEmail} disabled={busy === "email"}
+          className="w-full rounded-lg bg-white/10 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15 disabled:opacity-50">
+          {busy === "email" ? "Секунду…" : "Обновить почту"}
+        </button>
+      </div>
+
+      {/* Change password */}
+      <div className="rounded-xl border border-white/5 bg-white/3 px-4 py-3.5 space-y-2">
+        <p className="text-xs text-white/40">Сменить пароль</p>
+        <input type="password" value={newPassword} placeholder="Новый пароль" minLength={6}
+          onChange={(e) => setNewPassword(e.target.value)} className={acctInput} />
+        <button onClick={changePassword} disabled={busy === "password"}
+          className="w-full rounded-lg bg-white/10 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15 disabled:opacity-50">
+          {busy === "password" ? "Секунду…" : "Обновить пароль"}
+        </button>
+      </div>
+
+      {/* 2FA */}
+      <div className="rounded-xl border border-white/5 bg-white/3 px-4 py-3.5 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-white/40">Двухфакторная защита</p>
+          <span className={`text-xs font-medium ${has2fa ? "text-green-400" : "text-white/40"}`}>
+            {has2fa === null ? "…" : has2fa ? "включена" : "выключена"}
+          </span>
         </div>
-        <div className="px-4 py-3.5">
-          <p className="text-xs text-white/40 mb-1">Auth provider</p>
-          <p className="text-sm text-white">GitHub</p>
-        </div>
+
+        {qr ? (
+          <div className="flex flex-col items-center gap-3 pt-1">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={qr} alt="QR 2FA" className="h-40 w-40 rounded-lg bg-white p-2" />
+            {secret && <p className="break-all text-center font-mono text-[10px] text-white/40">{secret}</p>}
+            <input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code}
+              placeholder="000000" onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+              className={`${acctInput} text-center font-mono tracking-[0.3em]`} />
+            <button onClick={confirm2fa} disabled={busy === "2fa"}
+              className="w-full rounded-lg bg-white py-2 text-sm font-medium text-black transition-colors hover:bg-white/90 disabled:opacity-50">
+              {busy === "2fa" ? "Проверяем…" : "Подтвердить"}
+            </button>
+          </div>
+        ) : has2fa ? (
+          <button onClick={disable2fa} disabled={busy === "2fa"}
+            className="w-full rounded-lg border border-red-500/20 bg-red-500/5 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-50">
+            {busy === "2fa" ? "Секунду…" : "Отключить 2FA"}
+          </button>
+        ) : (
+          <button onClick={enable2fa}
+            className="w-full rounded-lg bg-white/10 py-2 text-sm font-medium text-white transition-colors hover:bg-white/15">
+            Включить 2FA
+          </button>
+        )}
       </div>
 
       <div className="rounded-xl border border-white/5 bg-white/3 px-4 py-3.5">

@@ -1,8 +1,10 @@
 // lib/auth/onboarding.ts — decides which onboarding step a logged-in user needs.
-// Mandatory flow: profile (display_name) → TOTP 2FA → app.
+// Flow: profile (display_name) is mandatory. 2FA is OPTIONAL (managed in account
+// settings), but if a user HAS enrolled a factor, every login must still elevate
+// to aal2 via a code challenge.
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type OnboardingStep = "profile" | "mfa-enroll" | "mfa-challenge" | "done";
+export type OnboardingStep = "profile" | "mfa-challenge" | "done";
 
 export async function resolveOnboardingStep(
   supabase: SupabaseClient,
@@ -20,13 +22,13 @@ export async function resolveOnboardingStep(
     return { step: "profile", displayName };
   }
 
-  // 2. 2FA is mandatory. Read the assurance level off the session.
-  //   nextLevel === 'aal1'                  → no verified factor → must enrol
-  //   nextLevel === 'aal2', current 'aal1'  → enrolled but this session not elevated → challenge
-  //   currentLevel === 'aal2'               → fully authenticated → done
+  // 2. If 2FA is enrolled, this session must be elevated to aal2.
+  //   currentLevel === 'aal2'              → fully authenticated → done
+  //   nextLevel === 'aal2', current 'aal1' → has a factor, not elevated → challenge
+  //   nextLevel === 'aal1'                 → no factor (2FA off) → done
   const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
 
   if (aal?.currentLevel === "aal2") return { step: "done", displayName };
   if (aal?.nextLevel === "aal2") return { step: "mfa-challenge", displayName };
-  return { step: "mfa-enroll", displayName };
+  return { step: "done", displayName };
 }

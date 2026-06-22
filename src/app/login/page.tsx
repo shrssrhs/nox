@@ -20,20 +20,25 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
 
-    const uname = normalizeUsername(username);
-    if (!isValidUsername(uname)) {
-      setError("Юзернейм: 3–20 символов, латиница, цифры и _");
+    // One field, two kinds of identifier: an email (has "@") is used directly;
+    // anything else is treated as a username → synthetic email.
+    const id = username.trim();
+    const isEmail = id.includes("@");
+    const uname = isEmail ? "" : normalizeUsername(id);
+    if (!isEmail && !isValidUsername(uname)) {
+      setError("Юзернейм: 3–20 символов (латиница, цифры, _) — или укажите почту");
       return;
     }
 
     setLoading("creds");
-    const email = usernameToEmail(uname);
+    const email = isEmail ? id.toLowerCase() : usernameToEmail(uname);
     try {
       if (mode === "signup") {
         const { data, error: err } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { username: uname } },
+          // Store username only for username-signups; email-signups pick one later.
+          options: uname ? { data: { username: uname } } : undefined,
         });
         if (err) throw err;
         if (!data.session) {
@@ -71,7 +76,7 @@ export default function LoginPage() {
 
       <form onSubmit={handleCreds} className="flex flex-col gap-3">
         <div>
-          <label className="mb-1 block text-xs text-white/50">Юзернейм</label>
+          <label className="mb-1 block text-xs text-white/50">Почта или юзернейм</label>
           <input
             type="text"
             required
@@ -79,8 +84,8 @@ export default function LoginPage() {
             autoCorrect="off"
             spellCheck={false}
             value={username}
-            onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-            placeholder="alex"
+            onChange={(e) => setUsername(e.target.value.replace(/\s/g, ""))}
+            placeholder="alex или you@mail.com"
             className={inputCls}
           />
         </div>
