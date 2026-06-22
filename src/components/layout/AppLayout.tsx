@@ -22,6 +22,7 @@ import { useReactions } from "@/hooks/useReactions";
 import type { ReactionGroup } from "@/hooks/useReactions";
 import { useTyping } from "@/hooks/useTyping";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useKeyboardViewport } from "@/hooks/useKeyboardViewport";
 import { useCallPresence } from "@/hooks/useCallPresence";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -252,7 +253,7 @@ function MessageBubble({
 
         {/* Bubble */}
         <div
-          className={`rounded-2xl text-sm leading-relaxed overflow-hidden ${
+          className={`select-text rounded-2xl text-sm leading-relaxed overflow-hidden ${
             isImage || isVideo
               ? "bg-transparent p-0"
               : isOwn
@@ -578,6 +579,7 @@ export function AppLayout() {
   // Channels
   const [channels, setChannels]           = useState<Channel[]>([]);
   const isMobile = useIsMobile();
+  const keyboardOpen = useKeyboardViewport(isMobile);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(true);
 
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
@@ -835,7 +837,10 @@ export function AppLayout() {
     activeChannel.created_by === userId;
 
   return (
-    <div className="flex h-[100dvh] w-screen overflow-hidden bg-[#09090B] text-white">
+    <div
+      className="flex h-[100dvh] w-screen overflow-hidden bg-[#09090B] text-white"
+      style={isMobile ? { height: "var(--app-height, 100dvh)" } : undefined}
+    >
 
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
       {/* Mobile backdrop */}
@@ -988,7 +993,10 @@ export function AppLayout() {
       {/* ── MAIN CHAT ────────────────────────────────────────────────────── */}
       <main
         className="flex min-w-0 flex-1 flex-col"
-        style={isMobile ? { paddingTop: "env(safe-area-inset-top)", paddingBottom: "calc(60px + env(safe-area-inset-bottom))" } : undefined}
+        style={isMobile ? {
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: keyboardOpen ? "0px" : "calc(60px + env(safe-area-inset-bottom))",
+        } : undefined}
       >
         {/* DM view */}
         {view === "dm" && activeConv && userId && (
@@ -1513,7 +1521,7 @@ export function AppLayout() {
       )}
 
       {/* ── MOBILE BOTTOM NAV ────────────────────────────────────────────── */}
-      {isMobile && (
+      {isMobile && !keyboardOpen && (
         <nav
           className="fixed bottom-0 inset-x-0 z-50 flex min-h-[60px] items-center justify-around border-t border-white/10 bg-[#0D0D0F]"
           style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
