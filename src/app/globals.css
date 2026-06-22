@@ -9,6 +9,18 @@ body {
   background: #09090b;
   color: white;
   overflow: hidden;
+  /* Stop iOS rubber-band scroll bouncing the whole app. */
+  overscroll-behavior: none;
+}
+
+/* iOS Safari zooms the page when focusing an input with font-size < 16px.
+   Force 16px on touch widths so the layout never jumps on focus. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 * {

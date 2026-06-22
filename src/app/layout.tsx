@@ -22,6 +22,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#09090b",
+  // Let content extend under the notch / home indicator so env(safe-area-inset-*) works.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

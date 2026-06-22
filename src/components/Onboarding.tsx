@@ -96,7 +96,7 @@ export function Onboarding({
   const securityActive = step === "mfa-enroll" || step === "mfa-challenge";
 
   return (
-    <div className="flex min-h-screen w-screen items-center justify-center bg-[#09090B] p-4 text-white">
+    <div className="flex min-h-[100dvh] w-screen items-center justify-center bg-[#09090B] p-4 text-white">
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur">
         {/* Stepper */}
         <div className="mb-8 flex items-center justify-center gap-3 text-xs">

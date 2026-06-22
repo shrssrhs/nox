@@ -158,7 +158,7 @@ const inputCls =
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen w-screen flex-col items-center justify-center bg-[#09090B] p-4">
+    <div className="flex h-[100dvh] w-screen flex-col items-center justify-center bg-[#09090B] p-4">
       <div className="mb-10 text-center">
         <h1 className="text-4xl font-semibold tracking-tight text-white">Nox</h1>
         <p className="mt-2 text-sm text-white/40">Your space. Your people.</p>

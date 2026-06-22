@@ -835,7 +835,7 @@ export function AppLayout() {
     activeChannel.created_by === userId;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#09090B] text-white">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-[#09090B] text-white">
 
       {/* ── LEFT SIDEBAR ─────────────────────────────────────────────────── */}
       {/* Mobile backdrop */}
@@ -853,7 +853,7 @@ export function AppLayout() {
               }`
             : ""
         }`}
-        style={isMobile ? { width: "min(85vw, 320px)" } : { width: leftWidth, minWidth: MIN_SIDE, flexShrink: 0 }}
+        style={isMobile ? { width: "min(85vw, 320px)", paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" } : { width: leftWidth, minWidth: MIN_SIDE, flexShrink: 0 }}
       >
         <div className="border-b border-white/10 p-5">
           <h1 className="text-xl font-semibold tracking-tight">Nox</h1>
@@ -986,7 +986,10 @@ export function AppLayout() {
       {!isMobile && <ResizeHandle onResize={handleLeftResize} />}
 
       {/* ── MAIN CHAT ────────────────────────────────────────────────────── */}
-      <main className={`flex min-w-0 flex-1 flex-col ${isMobile ? "pb-[60px]" : ""}`}>
+      <main
+        className="flex min-w-0 flex-1 flex-col"
+        style={isMobile ? { paddingTop: "env(safe-area-inset-top)", paddingBottom: "calc(60px + env(safe-area-inset-bottom))" } : undefined}
+      >
         {/* DM view */}
         {view === "dm" && activeConv && userId && (
           <>
@@ -1511,7 +1514,10 @@ export function AppLayout() {
 
       {/* ── MOBILE BOTTOM NAV ────────────────────────────────────────────── */}
       {isMobile && (
-        <nav className="fixed bottom-0 inset-x-0 z-50 flex h-[60px] items-center justify-around border-t border-white/10 bg-[#0D0D0F]">
+        <nav
+          className="fixed bottom-0 inset-x-0 z-50 flex min-h-[60px] items-center justify-around border-t border-white/10 bg-[#0D0D0F]"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
           {/* Channels */}
           <button
             onClick={() => { setMobileSidebarOpen(true); }}
