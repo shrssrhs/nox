@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { OnboardingStep } from "@/lib/auth/onboarding";
 import { isValidUsername, normalizeUsername } from "@/lib/auth/username";
@@ -18,7 +18,9 @@ export function Onboarding({
   usernameLocked: boolean;
   initialName: string;
 }) {
-  const supabase = createClient();
+  // One stable client for the whole flow. Creating it per-render churns the
+  // useCallback identities below and re-fires the enrol effect endlessly.
+  const supabase = useMemo(() => createClient(), []);
   const [step, setStep] = useState<Step>(initialStep);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,6 +34,8 @@ export function Onboarding({
   const [qr, setQr] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  // Ensures enrol/challenge kicks off exactly once per security step.
+  const mfaInit = useRef(false);
 
   // ── Profile ────────────────────────────────────────────────────────────────
   async function saveProfile() {
@@ -78,16 +82,24 @@ export function Onboarding({
   const startChallenge = useCallback(async () => {
     setError(null);
     const { data: factors } = await supabase.auth.mfa.listFactors();
-    const totp = (factors?.totp ?? []).find((f) => f.status === "verified") ?? factors?.totp?.[0];
-    if (!totp) { setStep("mfa-enroll"); return; }
+    const totp = (factors?.totp ?? []).find((f) => f.status === "verified");
+    if (!totp) {
+      // No verified factor → enrol instead. Re-arm the guard for the new step.
+      mfaInit.current = false;
+      setStep("mfa-enroll");
+      return;
+    }
     setFactorId(totp.id);
   }, [supabase]);
 
-  // Kick off the right MFA setup when we land on a security step.
+  // Kick off the right MFA setup once we land on a security step — exactly once.
   useEffect(() => {
-    if (step === "mfa-enroll" && !factorId) startEnroll();
-    if (step === "mfa-challenge" && !factorId) startChallenge();
-  }, [step, factorId, startEnroll, startChallenge]);
+    if (step !== "mfa-enroll" && step !== "mfa-challenge") return;
+    if (mfaInit.current) return;
+    mfaInit.current = true;
+    if (step === "mfa-enroll") startEnroll();
+    else startChallenge();
+  }, [step, startEnroll, startChallenge]);
 
   // ── Verify the 6-digit code (shared by enrol + challenge) ────────────────────
   async function verifyCode() {
@@ -100,6 +112,12 @@ export function Onboarding({
     });
     if (vErr) { setError("Неверный код. Попробуйте ещё раз."); setBusy(false); return; }
     // Session is now aal2 — full nav so server gating sees the elevated cookie.
+    window.location.href = "/";
+  }
+
+  // Escape hatch: onboarding is mandatory, so the only way out is to sign out.
+  async function signOutAndLeave() {
+    await supabase.auth.signOut();
     window.location.href = "/";
   }
 
@@ -203,6 +221,15 @@ export function Onboarding({
             </div>
           </>
         )}
+
+        <div className="mt-6 text-center">
+          <button
+            onClick={signOutAndLeave}
+            className="text-xs text-white/40 transition-colors hover:text-white"
+          >
+            Выйти на главную
+          </button>
+        </div>
       </div>
     </div>
   );
