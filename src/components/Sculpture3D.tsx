@@ -33,7 +33,7 @@ export function Sculpture3D({ style }: { style?: React.CSSProperties }) {
     const { w, h } = getSize();
 
     const camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 100);
-    camera.position.set(0, 0.15, 4.4);
+    camera.position.set(0, 0.3, 2.9);
 
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     renderer.setSize(w, h, false);
@@ -146,13 +146,11 @@ export function Sculpture3D({ style }: { style?: React.CSSProperties }) {
     window.addEventListener("mousemove", onMouse, { passive: true });
 
     // ── Render loop ───────────────────────────────────────────────────────────
-    let t = 0;
     function tick() {
-      t += 0.0032;
       const m = mouse.current;
       m.x += (m.tx - m.x) * 0.032;
       m.y += (m.ty - m.y) * 0.032;
-      pivot.rotation.y = t + m.x * 0.3;
+      pivot.rotation.y = -0.25 + m.x * 0.3;
       pivot.rotation.x = m.y * 0.14;
       renderer.render(scene, camera);
       rafRef.current = requestAnimationFrame(tick);

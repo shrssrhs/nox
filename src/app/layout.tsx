@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { PrefsInit } from "@/components/PrefsInit";
 import "./globals.css";
@@ -17,8 +17,11 @@ export const metadata: Metadata = {
   title: "Nox",
   description: "Your space. Your people.",
   manifest: "/manifest.json",
-  themeColor: "#09090b",
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Nox" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#09090b",
 };
 
 export default function RootLayout({

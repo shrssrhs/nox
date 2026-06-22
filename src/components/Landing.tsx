@@ -75,9 +75,11 @@ function TypingCard() {
 function WireframeRing() {
   const spokes = Array.from({ length: 12 }, (_, i) => {
     const a = (i / 12) * Math.PI * 2;
+    // Round to 2dp so server and client serialize identical strings (no hydration mismatch)
+    const r = (n: number) => Math.round(n * 100) / 100;
     return {
-      x1: 300 + Math.cos(a) * 168, y1: 300 + Math.sin(a) * 168,
-      x2: 300 + Math.cos(a) * 288, y2: 300 + Math.sin(a) * 288,
+      x1: r(300 + Math.cos(a) * 168), y1: r(300 + Math.sin(a) * 168),
+      x2: r(300 + Math.cos(a) * 288), y2: r(300 + Math.sin(a) * 288),
     };
   });
   return (
