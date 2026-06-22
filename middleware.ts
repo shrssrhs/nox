@@ -47,5 +47,5 @@ export const config = {
   // Exclude static/public assets so auth never redirects them to /login.
   // manifest.json & sw.js must be excluded or the browser gets HTML back
   // ("Manifest: Line 1 Syntax error" / broken service-worker registration).
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|manifest.json|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|manifest.json|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|obj|glb|gltf)$).*)"],
 };
