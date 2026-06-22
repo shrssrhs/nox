@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import Link from "next/link";
 import { DemoButton } from "@/components/DemoButton";
+import { Sculpture3D } from "@/components/Sculpture3D";
 
 // ─── Logo ─────────────────────────────────────────────────────────────────────
 function Logo({ size = 36 }: { size?: number }) {
@@ -375,113 +376,133 @@ export function Landing() {
       </nav>
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}
-      <section
-        className="relative z-10 mx-auto flex max-w-6xl flex-col items-center px-6 pb-4 pt-20 text-center md:pt-28"
-      >
-        {/* Eyebrow */}
-        <div
-          className="nox-reveal"
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 999,
-            padding: "6px 16px", marginBottom: 28,
-            background: "rgba(255,255,255,0.03)", backdropFilter: "blur(8px)",
-          }}
-        >
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", boxShadow: "0 0 8px #34d399", display: "inline-block" }} />
-          <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.06em", color: "rgba(255,255,255,0.45)" }}>
-            Your space. Your people.
-          </span>
-        </div>
+      <section className="relative z-10 mx-auto max-w-6xl px-6 pb-4 pt-20 md:pt-24">
 
-        {/* Headline — word-mask slide-up reveal */}
-        <h1
-          className="nox-reveal d1"
+        {/* Two-column grid on desktop: text left, sculpture right */}
+        <div
           style={{
-            maxWidth: 760,
-            fontSize: "clamp(46px,8.5vw,94px)",
-            fontWeight: 900, lineHeight: 0.94,
-            letterSpacing: "-0.035em",
-            fontFamily: "var(--font-geist-sans)",
-            marginBottom: 28,
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: 0,
+            alignItems: "center",
           }}
+          className="md:[grid-template-columns:1fr_460px] md:gap-8"
         >
-          {/* Line 1 with shimmer — single mask block */}
-          <span className="nox-mask" style={{ display: "block" }}>
-            <span
+          {/* ── Left column — text + CTAs ─────────────────────────────────── */}
+          <div
+            className="flex flex-col items-center text-center md:items-start md:text-left"
+          >
+            {/* Eyebrow */}
+            <div
+              className="nox-reveal"
               style={{
-                display: "inline-block",
-                background: "linear-gradient(90deg, #fff 0%, #fff 30%, #a1a1aa 50%, #fff 70%, #fff 100%)",
-                backgroundSize: "400% auto",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-                animation: "nox-shimmer 6s linear infinite",
+                display: "inline-flex", alignItems: "center", gap: 8,
+                border: "1px solid rgba(255,255,255,0.1)", borderRadius: 999,
+                padding: "6px 16px", marginBottom: 28,
+                background: "rgba(255,255,255,0.03)", backdropFilter: "blur(8px)",
               }}
             >
-              A home for
-            </span>
-          </span>
-          {/* Line 2 — delayed */}
-          <span className="nox-mask" style={{ display: "block" }}>
-            <span style={{ display: "inline-block", color: "rgba(255,255,255,0.88)", transitionDelay: "0.14s" }}>
-              your&nbsp;people.
-            </span>
-          </span>
-        </h1>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", boxShadow: "0 0 8px #34d399", display: "inline-block" }} />
+              <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: "0.06em", color: "rgba(255,255,255,0.45)" }}>
+                Your space. Your people.
+              </span>
+            </div>
 
-        {/* Sub */}
-        <p
-          className="nox-reveal d2"
-          style={{
-            maxWidth: 430, fontSize: "clamp(14px,1.6vw,17px)",
-            lineHeight: 1.65, color: "rgba(255,255,255,0.36)",
-            fontFamily: "var(--font-geist-sans)", marginBottom: 36,
-          }}
-        >
-          Fast, private, and entirely yours — channels, voice calls,
-          and DMs without the noise, feeds, or ads.
-        </p>
+            {/* Headline */}
+            <h1
+              className="nox-reveal d1"
+              style={{
+                fontSize: "clamp(46px,6.5vw,86px)",
+                fontWeight: 900, lineHeight: 0.94,
+                letterSpacing: "-0.035em",
+                fontFamily: "var(--font-geist-sans)",
+                marginBottom: 28,
+              }}
+            >
+              <span className="nox-mask" style={{ display: "block" }}>
+                <span
+                  style={{
+                    display: "inline-block",
+                    background: "linear-gradient(90deg, #fff 0%, #fff 30%, #a1a1aa 50%, #fff 70%, #fff 100%)",
+                    backgroundSize: "400% auto",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                    animation: "nox-shimmer 6s linear infinite",
+                  }}
+                >
+                  A home for
+                </span>
+              </span>
+              <span className="nox-mask" style={{ display: "block" }}>
+                <span style={{ display: "inline-block", color: "rgba(255,255,255,0.88)", transitionDelay: "0.14s" }}>
+                  your&nbsp;people.
+                </span>
+              </span>
+            </h1>
 
-        {/* CTAs — primary is magnetic */}
-        <div
-          className="nox-reveal d3"
-          style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", justifyContent: "center" }}
-        >
-          <Link
-            ref={magneticRef}
-            href="/login"
-            style={{
-              background: "white", color: "black",
-              borderRadius: 14, padding: "14px 28px",
-              fontSize: 13, fontWeight: 600, display: "inline-block",
-              boxShadow: "0 0 0 rgba(255,255,255,0)",
-              transition: "box-shadow 0.2s",
-            }}
-            className="hover:shadow-[0_0_40px_rgba(255,255,255,0.2)]"
+            {/* Sub */}
+            <p
+              className="nox-reveal d2"
+              style={{
+                maxWidth: 400, fontSize: "clamp(14px,1.5vw,16px)",
+                lineHeight: 1.7, color: "rgba(255,255,255,0.36)",
+                fontFamily: "var(--font-geist-sans)", marginBottom: 36,
+              }}
+            >
+              Fast, private, and entirely yours — channels, voice calls,
+              and DMs without the noise, feeds, or ads.
+            </p>
+
+            {/* CTAs */}
+            <div className="nox-reveal d3 flex flex-wrap items-center gap-3 justify-center md:justify-start">
+              <Link
+                ref={magneticRef}
+                href="/login"
+                style={{
+                  background: "white", color: "black",
+                  borderRadius: 14, padding: "14px 28px",
+                  fontSize: 13, fontWeight: 600, display: "inline-block",
+                  transition: "box-shadow 0.2s",
+                }}
+                className="hover:shadow-[0_0_40px_rgba(255,255,255,0.2)]"
+              >
+                Create your space — free
+              </Link>
+              <DemoButton
+                className="rounded-xl border border-white/10 px-7 py-3.5 text-sm font-semibold text-white/55 backdrop-blur-sm transition-all hover:bg-white/[0.07] hover:text-white disabled:opacity-50"
+              />
+            </div>
+          </div>
+
+          {/* ── Right column — 3D marble bust ─────────────────────────────── */}
+          <div
+            className="hidden md:block"
+            style={{ position: "relative", height: 520 }}
           >
-            Create your space — free
-          </Link>
-          <DemoButton
-            className="rounded-xl border border-white/10 px-7 py-3.5 text-sm font-semibold text-white/55 backdrop-blur-sm transition-all hover:bg-white/[0.07] hover:text-white disabled:opacity-50"
-          />
+            {/* Soft glow behind the sculpture */}
+            <div style={{
+              position: "absolute", inset: 0,
+              background: "radial-gradient(ellipse at 50% 55%, rgba(255,255,255,0.055) 0%, transparent 68%)",
+              pointerEvents: "none",
+            }} />
+            <Sculpture3D style={{ width: "100%", height: "100%" }} />
+          </div>
         </div>
 
-        {/* 3D app preview — the big floating stage */}
+        {/* 3D app preview — full-width row below the two columns */}
         <div
           className="nox-scene"
           style={{
             position: "relative",
-            margin: "64px auto 0",
+            margin: "72px auto 0",
             width: "100%", maxWidth: 660,
             padding: "64px 56px 40px",
             overflow: "visible",
           }}
         >
-          {/* Spinning wireframe ring */}
           <WireframeRing />
 
-          {/* Glow bloom below card */}
           <div style={{
             position: "absolute", left: "50%", top: "55%",
             transform: "translate(-50%,-50%)",
@@ -491,26 +512,16 @@ export function Landing() {
             pointerEvents: "none", zIndex: 1,
           }} />
 
-          {/* 3D tilt stage */}
           <div
             className="nox-stage"
             style={{ position: "relative", zIndex: 2, transformOrigin: "center 58%" }}
           >
             <AppPreview />
 
-            {/* Floating notification card — top-right, Z+54px */}
-            <div
-              className="nox-float-notif"
-              style={{ position: "absolute", top: -48, right: 8, zIndex: 10 }}
-            >
+            <div className="nox-float-notif" style={{ position: "absolute", top: -48, right: 8, zIndex: 10 }}>
               <NotifCard />
             </div>
-
-            {/* Floating typing card — mid-left, Z+34px */}
-            <div
-              className="nox-float-typing"
-              style={{ position: "absolute", bottom: 60, left: -18, zIndex: 10 }}
-            >
+            <div className="nox-float-typing" style={{ position: "absolute", bottom: 60, left: -18, zIndex: 10 }}>
               <TypingCard />
             </div>
           </div>
