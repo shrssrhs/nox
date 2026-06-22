@@ -514,10 +514,13 @@ function AccountSection({ email, onSignOut }: { email: string | null; onSignOut:
   async function changeEmail() {
     if (!/.+@.+\..+/.test(newEmail)) { setMsg({ k: "err", t: "Введите корректную почту" }); return; }
     setBusy("email"); setMsg(null);
-    const { error } = await supabase.auth.updateUser({ email: newEmail.trim().toLowerCase() });
+    const { data, error } = await supabase.auth.updateUser({ email: newEmail.trim().toLowerCase() });
     setBusy(null);
     if (error) { setMsg({ k: "err", t: error.message }); return; }
-    setMsg({ k: "ok", t: "Проверьте новую почту — там ссылка для подтверждения." });
+    // With email confirmations on, the change is pending (new_email set) until
+    // the user clicks the link; with them off it applies immediately.
+    const pending = Boolean(data?.user?.new_email);
+    setMsg({ k: "ok", t: pending ? "Проверьте новую почту — там ссылка для подтверждения." : "Почта обновлена." });
     setNewEmail("");
   }
 
