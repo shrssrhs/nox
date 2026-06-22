@@ -219,7 +219,7 @@ export function Landing() {
       ptr.current.tx = (t.clientX / window.innerWidth) * 2 - 1;
       ptr.current.ty = (t.clientY / window.innerHeight) * 2 - 1;
     };
-    const onScroll = () => { ptr.current.scroll = window.scrollY; };
+    const onScroll = () => { ptr.current.scroll = root.scrollTop; };
 
     // Cursor expand on interactive elements
     const hoverEls = root.querySelectorAll("a,button");
@@ -230,7 +230,7 @@ export function Landing() {
 
     window.addEventListener("mousemove", onMouse, { passive: true });
     window.addEventListener("touchmove", onTouch, { passive: true });
-    window.addEventListener("scroll", onScroll, { passive: true });
+    root.addEventListener("scroll", onScroll, { passive: true });
 
     function tick() {
       const p = ptr.current;
@@ -287,7 +287,7 @@ export function Landing() {
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener("mousemove", onMouse);
       window.removeEventListener("touchmove", onTouch);
-      window.removeEventListener("scroll", onScroll);
+      root.removeEventListener("scroll", onScroll);
     };
   }, []);
 
@@ -300,7 +300,7 @@ export function Landing() {
           if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1, root: rootRef.current }
     );
     els.forEach(el => io.observe(el));
     return () => io.disconnect();
@@ -328,8 +328,8 @@ export function Landing() {
   return (
     <div
       ref={rootRef}
-      className="nox-landing relative min-h-screen w-full overflow-x-hidden"
-      style={{ background: "#09090b", color: "white" }}
+      className="nox-landing relative w-full overflow-x-hidden overflow-y-auto"
+      style={{ background: "#09090b", color: "white", height: "100vh" }}
     >
       {/* Custom cursor — pointer devices only */}
       <div ref={cursorRef} className="nox-cursor" style={{ opacity: 0 }} />
@@ -379,15 +379,7 @@ export function Landing() {
       <section className="relative z-10 mx-auto max-w-6xl px-6 pb-4 pt-20 md:pt-24">
 
         {/* Two-column grid on desktop: text left, sculpture right */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr",
-            gap: 0,
-            alignItems: "center",
-          }}
-          className="md:[grid-template-columns:1fr_460px] md:gap-8"
-        >
+        <div className="grid grid-cols-1 items-center gap-0 md:grid-cols-[1fr_460px] md:gap-8">
           {/* ── Left column — text + CTAs ─────────────────────────────────── */}
           <div
             className="flex flex-col items-center text-center md:items-start md:text-left"
