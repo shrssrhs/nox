@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 
 // Fluent Emoji renderer — uses Microsoft's open-source fluentui-emoji repo via CDN.
 // Fallbacks to native Unicode if emoji not in the map.
@@ -107,8 +108,9 @@ interface FEmojiProps {
 }
 
 export function FEmoji({ emoji, size = 16, className = "" }: FEmojiProps) {
+  const [failed, setFailed] = useState<string | null>(null);
   const entry = MAP[emoji];
-  if (!entry) return <span className={className} style={{ fontSize: size * 0.85, lineHeight: 1 }}>{emoji}</span>;
+  if (!entry || failed === emoji) return <span className={className} style={{ fontSize: size * 0.85, lineHeight: 1 }}>{emoji}</span>;
 
   const [folder, file] = entry;
   const src = `${BASE}/${encodeURIComponent(folder)}/Color/${file}_color.svg`;
@@ -122,14 +124,7 @@ export function FEmoji({ emoji, size = 16, className = "" }: FEmojiProps) {
       className={className}
       draggable={false}
       style={{ display: "inline-block", verticalAlign: "middle", flexShrink: 0 }}
-      onError={(e) => {
-        const el = e.currentTarget;
-        const span = document.createElement("span");
-        span.textContent = emoji;
-        span.style.fontSize = `${Math.round(size * 0.85)}px`;
-        span.style.lineHeight = "1";
-        el.replaceWith(span);
-      }}
+      onError={() => setFailed(emoji)}
     />
   );
 }

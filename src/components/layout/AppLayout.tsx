@@ -8,6 +8,7 @@ import type { Message } from "@/hooks/useMessages";
 import { CallRoom } from "@/components/CallRoom";
 import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
 import { SettingsModal } from "@/components/SettingsModal";
+import { NewConversationModal } from "@/components/NewConversationModal";
 import { DMView } from "@/components/DMView";
 import { useConversations, getOrCreateConversation } from "@/hooks/useDMs";
 import { useUnread } from "@/hooks/useUnread";
@@ -23,6 +24,11 @@ import type { ReactionGroup } from "@/hooks/useReactions";
 import { useTyping } from "@/hooks/useTyping";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useKeyboardViewport } from "@/hooks/useKeyboardViewport";
+import type { PublicProfile } from "@/lib/profile";
+import { useAttachmentUrl } from "@/hooks/useAttachmentUrl";
+import { useChatDraft } from "@/hooks/useChatDraft";
+import { uploadAttachment } from "@/lib/attachments";
+import { messageError, submissionId } from "@/lib/message-state";
 import { useCallPresence } from "@/hooks/useCallPresence";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -152,7 +158,7 @@ function MessageBubble({
 }) {
   const name = msg.profiles?.display_name ?? "Unknown";
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  const badges = (msg.profiles as any)?.badges || [];
+  const badges = msg.profiles?.badges || [];
 
   // Parse optional reply prefix
   const replyMatch = msg.content.match(REPLY_RE);
@@ -170,6 +176,7 @@ function MessageBubble({
   const [editValue, setEditValue] = useState(text);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  const { url: mediaUrl, error: mediaError } = useAttachmentUrl(text);
   const isImage = /\.(jpeg|jpg|gif|png|webp)($|\?)/i.test(text);
   const isVideo = /\.(mp4|webm|ogg|mov)($|\?)/i.test(text);
   const isStorageFile = text.startsWith("http") && text.includes("/storage/v1/object/public/");
@@ -178,7 +185,7 @@ function MessageBubble({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setMenuPos({ x: e.clientX, y: e.clientY });
+    setMenuPos({ x: Math.max(8,Math.min(e.clientX,window.innerWidth-190)), y: Math.max(8,Math.min(e.clientY,window.innerHeight-230)) });
     setMenuVisible(true);
   };
 
@@ -191,7 +198,7 @@ function MessageBubble({
   const handleCopy = async () => {
     if (isImage) {
       try {
-        const res = await fetch(text);
+        const res = await fetch(mediaUrl ?? text);
         const blob = await res.blob();
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
         return;
@@ -231,7 +238,7 @@ function MessageBubble({
                 })}
             </span>
           )}
-          <span className="text-[11px] text-white/30">{time}</span>
+          <span className="text-[11px] text-white/30">{time}</span><button aria-label="Действия с сообщением" title="Действия с сообщением" onClick={event=>{event.stopPropagation();setMenuPos({x:Math.max(8,Math.min(event.clientX,window.innerWidth-190)),y:Math.max(8,Math.min(event.clientY,window.innerHeight-230))});setMenuVisible(true);}} className="ml-1 rounded px-1 text-white/25 hover:bg-white/10 hover:text-white">⋯</button>
           {isPinned && <span className="text-[11px] text-white/25 select-none">·</span>}
           {isPinned && (
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/25">
@@ -273,8 +280,7 @@ function MessageBubble({
                 <button onClick={() => setIsEditing(false)} className="text-white/40 hover:text-white px-2 py-1">[cancel]</button>
                 <button
                   onClick={async () => {
-                    if (editValue.trim()) await onEdit(msg.id, editValue.trim());
-                    setIsEditing(false);
+                    try { if (editValue.trim()) await onEdit(msg.id, editValue.trim()); setIsEditing(false); } catch { /* the thread error remains visible */ }
                   }}
                   className="text-emerald-400 hover:text-emerald-300 px-2 py-1"
                 >
@@ -282,10 +288,10 @@ function MessageBubble({
                 </button>
               </div>
             </div>
-          ) : isImage ? (
+          ) : mediaError ? <p role="alert" className="p-3 text-sm text-red-300">{mediaError}</p> : isImage ? (
             <div className="flex flex-col gap-1.5">
               <img
-                src={text}
+                src={mediaUrl ?? undefined}
                 alt="Shared media"
                 onClick={() => setPreviewUrl(text)}
                 className="max-w-xs md:max-w-md max-h-72 rounded-xl object-contain border border-white/10 bg-black/20 cursor-zoom-in"
@@ -295,7 +301,7 @@ function MessageBubble({
             </div>
           ) : isVideo ? (
             <div className="flex flex-col gap-1.5">
-              <video src={text} controls className="max-w-xs md:max-w-md max-h-72 rounded-xl border border-white/10 bg-black/20"/>
+              <video src={mediaUrl ?? undefined} controls className="max-w-xs md:max-w-md max-h-72 rounded-xl border border-white/10 bg-black/20"/>
               {caption && <p className="text-sm text-white/70 px-1">{caption}</p>}
             </div>
           ) : isCodeFile ? (
@@ -314,7 +320,7 @@ function MessageBubble({
               </div>
             </button>
           ) : isStorageFile ? (
-            <a href={text} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-3 rounded-xl transition-colors text-white">
+            <a href={mediaUrl ?? undefined} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-3 rounded-xl transition-colors text-white">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/60">📎</div>
               <div className="min-w-0 text-left">
                 <p className="text-xs font-medium truncate max-w-[180px] text-white/80">
@@ -412,7 +418,6 @@ function PinnedBanner({ pinnedMessages }: { pinnedMessages: Message[] }) {
     return () => clearInterval(t);
   }, [total]);
 
-  useEffect(() => { setIdx(0); }, [total]);
 
   const msg = pinnedMessages[idx % total];
   if (!msg) return null;
@@ -454,16 +459,16 @@ interface MemberListProps {
 }
 
 function MemberList({ channelId, myId, onDM }: MemberListProps) {
-  const [members, setMembers] = useState<{ id: string; display_name: string | null; avatar_url: string | null; status: string | null }[]>([]);
+  const [members, setMembers] = useState<PublicProfile[]>([]);
 
   useEffect(() => {
-    if (!channelId) { setMembers([]); return; }
+    if (!channelId) return;
     supabaseClient
       .from("channel_members")
-      .select("profiles(id, display_name, avatar_url, status, username, bio, banner_url, email, badges)")
+      .select("profiles(id, display_name, avatar_url, status, username, bio, banner_url, badges)")
       .eq("channel_id", channelId)
       .then(({ data }) => {
-        const list = (data ?? []).map((r: any) => r.profiles).filter(Boolean);
+        const list = (data ?? []).map((row) => row.profiles as unknown as PublicProfile).filter(Boolean);
         setMembers(list);
       });
   }, [channelId]);
@@ -496,7 +501,7 @@ function MemberList({ channelId, myId, onDM }: MemberListProps) {
             <span className="flex-1 truncate text-xs text-white/60 group-hover:text-white/80 flex items-center gap-1">
               {m.display_name ?? "Unknown"}
               {(() => {
-                const badges = (m as any).badges || [];
+                const badges = m.badges || [];
                 const colors: Record<string, string> = {
                   owner: "#F59E0B", investor: "#8B5CF6", admin: "#EF4444",
                   mod: "#3B82F6", verified: "#10B981",
@@ -540,7 +545,9 @@ export function AppLayout() {
   const handleRightResize = useCallback((d: number) => setRightWidth((w) => clamp(w - d, MIN_SIDE, MAX_SIDE)), []);
 
   // Auth / profile
-  const [previewUser, setPreviewUser] = useState<any | null>(null);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [newConversationOpen, setNewConversationOpen] = useState(false);
+  const [previewUser, setPreviewUser] = useState<PublicProfile | null>(null);
   const [profile, setProfile]     = useState<Profile | null>(null);
   const [userId, setUserId]       = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -551,29 +558,22 @@ export function AppLayout() {
 
   useEffect(() => {
     async function initUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) throw error ?? new Error("Sign in required");
       setUserId(user.id);
       setIsAnon(!!user.is_anonymous);
 
-      const { data } = await supabase
+      const { data, error: profileError } = await supabase
         .from("profiles")
         .select("display_name, avatar_url, status")
         .eq("id", user.id)
         .single();
 
-      if (data) {
-        setProfile(data);
-      } else {
-        setProfile({
-          display_name: user.user_metadata?.full_name ?? user.email ?? "Anonymous",
-          avatar_url: user.user_metadata?.avatar_url ?? null,
-          status: "🟢 Online",
-        });
-      }
+      if (profileError || !data) throw profileError ?? new Error("Profile unavailable");
+      setProfile(data);
     }
 
-    initUser();
+    void initUser().catch(() => setBootstrapError("Не удалось загрузить профиль. Перезагрузите страницу после восстановления соединения."));
   }, [supabase]);
 
   // Channels
@@ -585,7 +585,7 @@ export function AppLayout() {
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
 
   // DMs
-  const { conversations } = useConversations(userId ?? "");
+  const { conversations, refresh: refreshConversations, error: conversationsError } = useConversations(userId ?? "");
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [view, setView] = useState<"channel" | "dm">("channel");
 
@@ -602,47 +602,10 @@ export function AppLayout() {
         return;
       }
 
-      // No channels yet. Anonymous "Try the demo" visitors get an auto-provisioned
-      // sandbox channel instead of the create-channel modal — no DB setup needed.
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user?.is_anonymous) {
-        await provisionDemoSandbox(userId!);
-      } else {
-        setChannels([]);
-        setChannelModalOpen(true);
-      }
+      setChannels([]);
     }
 
-    async function provisionDemoSandbox(uid: string) {
-      const primary = await supabase
-        .from("channels")
-        .insert({ name: "demo-lounge", description: "Your private sandbox — try anything here ✨", created_by: uid })
-        .select("id, name, description")
-        .single();
-
-      let ch = primary.data as { id: string; name: string; description: string | null } | null;
-      if (!ch) {
-        const fallback = await supabase
-          .from("channels")
-          .insert({ name: "demo-lounge", created_by: uid })
-          .select("id, name")
-          .single();
-        const f = fallback.data as { id: string; name: string } | null;
-        if (f) ch = { ...f, description: null };
-      }
-
-      if (!ch) {
-        setChannelModalOpen(true);
-        return;
-      }
-
-      await supabase.from("channel_members").insert({ channel_id: ch.id, user_id: uid });
-      const channel: Channel = { id: ch.id, name: ch.name, description: ch.description, created_by: uid };
-      setChannels([channel]);
-      setActiveChannel(channel);
-    }
-
-    loadChannels();
+    void loadChannels().catch(() => setBootstrapError("Не удалось загрузить каналы. Перезагрузите страницу после восстановления соединения."));
   }, [userId]); // <-- Добавили userId в зависимости, чтобы код перезапускался при входе пользователя
 
   // Unread counts + browser notifications
@@ -659,43 +622,10 @@ export function AppLayout() {
   });
 
   // Messages
-  const { messages, sendMessage, editMessage, deleteMessage, loading, bottomRef } = useMessages(
+  const { messages, sendMessage, editMessage, deleteMessage, loading, bottomRef, error: messagesError, hasMore, loadingOlder, loadOlder } = useMessages(
     activeChannel?.id ?? ""
   );
 
-  useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
-      // Если канал не выбран или сейчас уже идет загрузка — игнорим
-      if (!activeChannel?.id || uploadingFile) return;
-  
-      const items = e.clipboardData?.items;
-      if (!items) return;
-  
-      for (let i = 0; i < items.length; i++) {
-        // Ищем файлы (картинки, файлы и т.д.) среди объектов буфера
-        if (items[i].kind === 'file') {
-          const file = items[i].getAsFile();
-          if (file) {
-            e.preventDefault(); // отменяем стандартное поведение (например, вставку текста [object File])
-            handleFileUpload(file); // передаем файл напрямую в загрузчик
-            break; // берем только первый файл, если их несколько
-          }
-        }
-      }
-    };
-  
-    window.addEventListener('paste', handlePaste);
-    return () => window.removeEventListener('paste', handlePaste);
-  }, [activeChannel, uploadingFile]); // хук обновится при смене канала
-
-  const handleFileUpload = (eOrFile: React.ChangeEvent<HTMLInputElement> | File) => {
-    const file = eOrFile instanceof File ? eOrFile : (eOrFile.target.files?.[0] ?? null);
-    if (!file || !activeChannel?.id) return;
-    setComposeFile(file);
-    setComposeCaption("");
-    setComposeObjUrl(URL.createObjectURL(file));
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
 
   // Reply
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -704,18 +634,18 @@ export function AppLayout() {
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!activeChannel) { setPinnedIds(new Set()); return; }
+    if (!activeChannel) return;
 
     supabase
       .from("pins")
       .select("message_id")
       .eq("channel_id", activeChannel.id)
       .then(({ data }) => {
-        setPinnedIds(new Set((data ?? []).map((r: any) => r.message_id)));
+        setPinnedIds(new Set((data ?? []).map((row) => row.message_id).filter((id): id is string => id !== null)));
       });
 
     const sub = supabase
-      .channel(`pins:${activeChannel.id}`)
+      .channel(`channel:${activeChannel.id}:pins`,{config:{private:true}})
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "pins", filter: `channel_id=eq.${activeChannel.id}` },
@@ -748,9 +678,11 @@ export function AppLayout() {
   }, [activeChannel, userId, pinnedIds]);
 
   // Input
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useChatDraft(`${userId}:channel:${activeChannel?.id ?? "none"}`);
   const sending = useRef(false);
-  const channelTypingId = view === "channel" ? (activeChannel?.id ?? "") : (activeConv?.id ?? "");
+  const pendingSend = useRef<{ content: string; id: string } | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const channelTypingId = view === "channel" ? (activeChannel?.id ?? "") : "";
   const { typingUsers: channelTyping, startTyping: chStartTyping, stopTyping: chStopTyping } =
     useTyping(channelTypingId, userId ?? "", profile?.display_name ?? "User");
 
@@ -762,12 +694,18 @@ export function AppLayout() {
       const author = replyingTo.profiles?.display_name ?? "Unknown";
       const preview = replyingTo.content.replace(REPLY_RE, "").slice(0, 60).replace(/\n/g, " ");
       content = `«R»${author}»${preview}«end»\n${content}`;
-      setReplyingTo(null);
     }
-    setDraft("");
-    await sendMessage(content);
-    sending.current = false;
-  }, [draft, sendMessage, replyingTo]);
+    pendingSend.current = submissionId(pendingSend.current, content, activeChannel?.id ?? "");
+    setSendError(null);
+    try {
+      await sendMessage(content, pendingSend.current.id);
+      setDraft((current) => current === draft ? "" : current);
+      setReplyingTo(null);
+      pendingSend.current = null;
+      chStopTyping();
+    } catch (error) { setSendError(messageError(error)); }
+    finally { sending.current = false; }
+  }, [draft, sendMessage, replyingTo, activeChannel?.id, setDraft, chStopTyping]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -780,33 +718,25 @@ export function AppLayout() {
   );
 
   // Compose overlay (file + caption before send)
+  const composeSubmission = useRef<{ content: string; id: string } | null>(null);
   const [composeFile, setComposeFile]       = useState<File | null>(null);
   const [composeCaption, setComposeCaption] = useState("");
   const [composeObjUrl, setComposeObjUrl]   = useState<string | null>(null);
 
   const handleComposeSend = useCallback(async () => {
-    if (!composeFile || !activeChannel?.id) return;
+    if (!composeFile || !activeChannel?.id || !userId || uploadingFile) return;
+    setUploadingFile(true); setSendError(null);
     try {
-      setUploadingFile(true);
-      const ext  = composeFile.name.split(".").pop() || "bin";
-      const base = composeFile.name.startsWith("image") ? "clipboard" : composeFile.name.split("-")[0];
-      const path = `${activeChannel.id}/${base}-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("attachments").upload(path, composeFile);
-      if (error) throw error;
-      const { data: { publicUrl } } = supabase.storage.from("attachments").getPublicUrl(path);
-      const content = composeCaption.trim()
-        ? `«CAP»${composeCaption.trim()}«end»\n${publicUrl}`
-        : publicUrl;
-      await sendMessage(content);
-    } catch (e) { console.error(e); }
-    finally {
-      setUploadingFile(false);
+      const attachment = await uploadAttachment(composeFile,"channel",activeChannel.id,userId);
+      const content = composeCaption.trim() ? `«CAP»${composeCaption.trim()}«end»\n${attachment.url}` : attachment.url;
+      composeSubmission.current = submissionId(composeSubmission.current,content,activeChannel.id);
+      await sendMessage(content,composeSubmission.current.id);
+      composeSubmission.current=null;
       if (composeObjUrl) URL.revokeObjectURL(composeObjUrl);
-      setComposeFile(null);
-      setComposeCaption("");
-      setComposeObjUrl(null);
-    }
-  }, [composeFile, composeCaption, composeObjUrl, activeChannel, supabase, sendMessage]);
+      setComposeFile(null); setComposeCaption(""); setComposeObjUrl(null);
+    } catch (error) { setSendError(error instanceof Error && error.message.includes("25 MB") ? "Файл больше 25 МБ." : messageError(error)); }
+    finally { setUploadingFile(false); }
+  }, [composeFile, composeCaption, composeObjUrl, activeChannel, userId, uploadingFile, sendMessage]);
 
   // Call
   const [callActive, setCallActive] = useState(false);
@@ -827,8 +757,44 @@ export function AppLayout() {
     userId && profile
       ? { userId, displayName: profile.display_name ?? "Someone", avatarUrl: profile.avatar_url }
       : null,
-    callActive ? callChannelId : null
+    callActive ? callChannelId : null,
+    channels.map((channel) => channel.id)
   );
+
+  function handleFileUpload(eOrFile: React.ChangeEvent<HTMLInputElement> | File) {
+    const file = eOrFile instanceof File ? eOrFile : (eOrFile.target.files?.[0] ?? null);
+    if (!file || !activeChannel?.id) return;
+    setComposeFile(file);
+    setComposeCaption("");
+    setComposeObjUrl(URL.createObjectURL(file));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      // Если канал не выбран или сейчас уже идет загрузка — игнорим
+      if (!activeChannel?.id || uploadingFile) return;
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        // Ищем файлы (картинки, файлы и т.д.) среди объектов буфера
+        if (items[i].kind === 'file') {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault(); // отменяем стандартное поведение (например, вставку текста [object File])
+            handleFileUpload(file); // передаем файл напрямую в загрузчик
+            break; // берем только первый файл, если их несколько
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [activeChannel, uploadingFile]); // хук обновится при смене канала
+
 
   // Owner-only channels: hide the composer for everyone except the creator.
   const canPostInActiveChannel =
@@ -905,9 +871,10 @@ export function AppLayout() {
           ))}
 
           {/* DMs */}
-          <p className="mb-1 mt-4 px-2 text-[10px] font-semibold uppercase tracking-wider text-white/25">
-            Direct Messages
-          </p>
+          <div className="mb-1 mt-4 flex items-center justify-between px-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/25">Direct Messages</p>
+            <button onClick={() => setNewConversationOpen(true)} aria-label="Новое сообщение" title="Новое сообщение" className="rounded-lg px-2 py-1 text-white/50 hover:bg-white/10 hover:text-white">+</button>
+          </div>
           {conversations.length === 0 && (
             <p className="px-2 py-2 text-xs text-white/20">No DMs yet</p>
           )}
@@ -1015,6 +982,7 @@ export function AppLayout() {
               </div>
             )}
             <DMView
+              key={activeConv.id}
               conversationId={activeConv.id}
               userId={userId}
               userName={profile?.display_name ?? "User"}
@@ -1023,6 +991,7 @@ export function AppLayout() {
           </>
         )}
 
+        {(bootstrapError || sendError || messagesError || conversationsError) && <div role="alert" className="border-b border-red-400/20 bg-red-500/10 px-5 py-3 text-sm text-red-200">{bootstrapError || sendError || messagesError || conversationsError}</div>}
         {/* Demo-mode banner (anonymous "Try the demo" visitors) */}
         {isAnon && (
           <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.05] px-4 py-2 md:px-6">
@@ -1263,9 +1232,11 @@ export function AppLayout() {
             </div>
           ) : (
             <div className="messages-list flex flex-col">
-              {messages.map((msg) => (
+              {hasMore && <button onClick={() => void loadOlder()} disabled={loadingOlder} className="mx-auto my-3 rounded-lg bg-white/5 px-4 py-2 text-sm text-white/60">{loadingOlder ? "Загружаем…" : "Предыдущие сообщения"}</button>}
+              {messages.map((msg, index) => (
+                <div key={msg.id}>
+                  {(index === 0 || new Date(messages[index-1].created_at).toDateString() !== new Date(msg.created_at).toDateString()) && <p className="my-4 text-center text-[11px] text-white/30">{new Date(msg.created_at).toLocaleDateString([], {day:"numeric",month:"long",year:"numeric"})}</p>}
                 <MessageBubble
-                  key={msg.id}
                   msg={msg}
                   isOwn={msg.sender_id === userId}
                   isPinned={pinnedIds.has(msg.id)}
@@ -1276,6 +1247,7 @@ export function AppLayout() {
                   reactions={reactions[msg.id] ?? []}
                   onReact={(emoji) => toggleReaction(msg.id, emoji)}
                 />
+              </div>
               ))}
               <div ref={bottomRef} />
             </div>
@@ -1305,11 +1277,11 @@ export function AppLayout() {
               ref={fileInputRef}
               onChange={handleFileUpload} 
               className="hidden" 
-              accept="image/*,video/*,application/*"
+              accept="*/*"
             />
         
             <button
-              onClick={() => fileInputRef.current?.click()}
+              aria-label="Прикрепить файл" onClick={() => fileInputRef.current?.click()}
               disabled={uploadingFile || !activeChannel}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-20"
             >
@@ -1335,7 +1307,7 @@ export function AppLayout() {
             />
             
             <button
-              onClick={handleSend}
+              aria-label="Отправить сообщение" onClick={handleSend}
               disabled={!draft.trim() || !activeChannel || uploadingFile}
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-20"
             >
@@ -1345,7 +1317,7 @@ export function AppLayout() {
               </svg>
             </button>
           </div>
-          <div className={`overflow-hidden transition-all duration-200 ${channelTyping.length > 0 ? "max-h-5 mt-1" : "max-h-0"}`}>
+          <div aria-hidden={channelTyping.length === 0} className={`overflow-hidden transition-all duration-200 ${channelTyping.length > 0 ? "max-h-5 mt-1" : "max-h-0"}`}>
             <p className="pl-1 text-[11px] text-white/30 italic">
               {channelTyping.join(", ")} {channelTyping.length === 1 ? "is" : "are"} typing
               <span className="inline-flex gap-0.5 ml-1">
@@ -1475,6 +1447,7 @@ export function AppLayout() {
                 <p className="text-sm text-white/60 truncate">{composeFile.name}</p>
               </div>
             )}
+            {sendError && <p role="alert" className="text-sm text-red-300">{sendError}</p>}
             {/* Caption input */}
             <input
               value={composeCaption}
@@ -1504,18 +1477,29 @@ export function AppLayout() {
         </div>
       )}
 
+      {newConversationOpen && userId && <NewConversationModal userId={userId} onClose={() => setNewConversationOpen(false)} onSelect={async (person) => {
+        const id = await getOrCreateConversation(userId, person.id);
+        if (!id) throw new Error("Conversation not created");
+        setActiveConv({id, other_user:person}); setActiveChannel(null); setView("dm");
+        if (isMobile) setMobileSidebarOpen(false);
+        await refreshConversations();
+      }}/>}
       {previewUser && (
         <UserPreviewModal
           user={previewUser}
           onClose={() => setPreviewUser(null)}
           onStartDM={async () => {
             if (!userId) return;
-            const convId = await getOrCreateConversation(userId, previewUser.id);
-            if (!convId) return;
-            setActiveConv({ id: convId, other_user: previewUser });
-            setActiveChannel(null);
-            setView("dm");
-            if (isMobile) setMobileSidebarOpen(false);
+            try {
+              const convId = await getOrCreateConversation(userId, previewUser.id);
+              if (!convId) return;
+              setActiveConv({ id: convId, other_user: previewUser });
+              setActiveChannel(null);
+              setView("dm");
+              setPreviewUser(null);
+              await refreshConversations();
+              if (isMobile) setMobileSidebarOpen(false);
+            } catch (error) { setSendError(messageError(error)); }
           }}
         />
       )}

@@ -34,7 +34,7 @@ export function PrefsInit() {
 /** Send a notification via the service worker (works when tab is backgrounded). */
 export function swNotify(title: string, body: string, tag?: string) {
   if (typeof navigator === "undefined") return;
-  if (Notification.permission !== "granted") return;
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   if (document.hasFocus()) return;
 
   // Prefer SW notification (shows even in background)

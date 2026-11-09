@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -32,7 +32,8 @@ export function useReactions(messageIds: string[], userId: string) {
 
   // Unique channel name per hook instance — avoids conflicts when multiple
   // useReactions calls are active simultaneously (AppLayout + DMView).
-  const channelName = useRef(`reactions-${Math.random().toString(36).slice(2)}`);
+  const instanceId=useId();
+  const channelName = `user:${userId}:reactions:${instanceId}`;
 
   const refetch = useCallback(async () => {
     if (!messageIds.length || !userId) return;
@@ -44,7 +45,9 @@ export function useReactions(messageIds: string[], userId: string) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsKey, userId]);
 
-  useEffect(() => { refetch(); }, [refetch]);
+  // Fetch an external snapshot when the message set changes.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void refetch(); }, [refetch]);
 
   // Always keep the ref current so the subscription handler calls the latest fetch
   const refetchRef = useRef(refetch);
@@ -54,12 +57,12 @@ export function useReactions(messageIds: string[], userId: string) {
   useEffect(() => {
     if (!userId) return;
     const channel = supabase
-      .channel(channelName.current)
+      .channel(channelName,{config:{private:true}})
       .on("postgres_changes", { event: "*", schema: "public", table: "reactions" },
         () => refetchRef.current())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [userId]);
+  }, [userId, channelName]);
 
   const toggle = useCallback(async (messageId: string, emoji: string) => {
     const hasMe = data[messageId]?.find((r) => r.emoji === emoji)?.hasMe;

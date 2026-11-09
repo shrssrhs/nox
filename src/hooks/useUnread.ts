@@ -6,12 +6,6 @@ import { swNotify } from "@/components/PrefsInit";
 
 const supabase = createClient();
 
-function requestNotificationPermission() {
-  if (typeof Notification !== "undefined" && Notification.permission === "default") {
-    Notification.requestPermission();
-  }
-}
-
 interface UseUnreadOptions {
   channelIds: string[];
   channelNames: Record<string, string>;
@@ -33,14 +27,13 @@ export function useUnread({
   const activeIdRef = useRef(activeId);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
-  useEffect(() => { requestNotificationPermission(); }, []);
 
   // Channel subscriptions
   useEffect(() => {
     if (!channelIds.length || !userId) return;
 
     const sub = supabase
-      .channel(`unread-channels-${userId}`)
+      .channel(`user:${userId}:unread-channels`, {config:{private:true}})
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages",
@@ -65,7 +58,7 @@ export function useUnread({
     if (!convIds.length || !userId) return;
 
     const sub = supabase
-      .channel(`unread-dms-${userId}`)
+      .channel(`user:${userId}:unread-dms`, {config:{private:true}})
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "direct_messages",

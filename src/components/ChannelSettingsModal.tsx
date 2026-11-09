@@ -50,6 +50,7 @@ export function ChannelSettingsModal({ channelId, userId, onClose, onUpdate, onL
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
   const [confirming, setConfirming] = useState<"delete" | "leave" | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
   const isOwner = channel?.created_by === userId;
@@ -92,7 +93,7 @@ export function ChannelSettingsModal({ channelId, userId, onClose, onUpdate, onL
 
       if (mRows) {
         setMembers(
-          mRows.map((r: any) => ({
+          (mRows as unknown as { user_id: string; profiles: { display_name: string | null; avatar_url: string | null; username: string | null } | null }[]).map((r) => ({
             user_id: r.user_id,
             display_name: r.profiles?.display_name ?? null,
             avatar_url: r.profiles?.avatar_url ?? null,
@@ -113,41 +114,25 @@ export function ChannelSettingsModal({ channelId, userId, onClose, onUpdate, onL
       description: desc.trim() || null,
     };
 
-    // Try with mode
-    const { data, error } = await supabase
-      .from("channels")
-      .update({ ...payload, mode })
-      .eq("id", channelId)
-      .select("id, name, description")
-      .single();
-
-    const result = error
-      ? (await supabase.from("channels").update(payload).eq("id", channelId).select("id, name, description").single()).data
-      : data;
-
-    if (result) {
-      setChannel((c) => c ? { ...c, name: result.name, description: result.description, mode } : c);
-      onUpdate(result);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    }
+    setErrorMessage(null);
+    const { data, error } = await supabase.from("channels").update({ ...payload, mode }).eq("id",channelId)
+      .select("id,name,description,mode,created_by").single();
+    if (error || !data) setErrorMessage("Не удалось сохранить настройки. Проверьте доступ и повторите.");
+    else { const updated = {...data, mode: data.mode === "owner_only" ? "owner_only" as const : "open" as const}; setChannel((current) => current ? { ...current,...updated } : current); onUpdate(updated); setSaved(true); setTimeout(() => setSaved(false),2000); }
     setSaving(false);
   }
 
   async function handleDelete() {
-    // Delete messages → pins → members → channel
-    await supabase.from("messages").delete().eq("channel_id", channelId);
-    await supabase.from("pins").delete().eq("channel_id", channelId);
-    await supabase.from("channel_members").delete().eq("channel_id", channelId);
-    await supabase.from("channels").delete().eq("id", channelId);
-    onLeave();
-    onClose();
+    setErrorMessage(null);
+    const { error } = await supabase.from("channels").delete().eq("id",channelId).select("id").single();
+    if (error) { setErrorMessage("Не удалось удалить канал. Требуются права владельца."); return; }
+    onLeave(); onClose();
   }
 
   async function handleLeave() {
-    await supabase.from("channel_members").delete().eq("channel_id", channelId).eq("user_id", userId);
-    onLeave();
-    onClose();
+    const { error } = await supabase.from("channel_members").delete().eq("channel_id",channelId).eq("user_id",userId).select("channel_id").single();
+    if (error) { setErrorMessage("Не удалось выйти. Владельцу нужно сначала передать владение или удалить канал."); return; }
+    onLeave(); onClose();
   }
 
   return (
@@ -158,6 +143,7 @@ export function ChannelSettingsModal({ channelId, userId, onClose, onUpdate, onL
     >
       <div className="relative flex w-full max-w-md flex-col rounded-2xl border border-white/10 bg-[#111113] shadow-2xl overflow-hidden max-h-[90vh]">
 
+        {errorMessage && <p role="alert" className="px-6 pt-5 text-sm text-red-300">{errorMessage}</p>}
         {/* Close */}
         <button
           onClick={onClose}

@@ -184,19 +184,12 @@ function ProfileSection({ userId, profile: initProfile, onUpdate, onProfileChang
   const [uploadingA, setUploadingA] = useState(false);
   const [uploadingB, setUploadingB] = useState(false);
   const [localProfile, setLocalProfile] = useState<Profile | null>(initProfile);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const usernameLocked = Boolean(initProfile?.email?.endsWith("@users.onirnox.lol"));
 
   const avatarRef = useRef<HTMLInputElement>(null);
   const bannerRef = useRef<HTMLInputElement>(null);
 
-  // Sync form when cached profile arrives from parent (no extra DB call)
-  useEffect(() => {
-    if (!initProfile) return;
-    setLocalProfile(initProfile);
-    setName(initProfile.display_name ?? "");
-    setUsername(initProfile.username ?? "");
-    setBio(initProfile.bio ?? "");
-    setStatus(initProfile.status ?? "🟢 Online");
-  }, [initProfile]);
 
   function updateLocal(p: Profile) {
     setLocalProfile(p);
@@ -204,42 +197,43 @@ function ProfileSection({ userId, profile: initProfile, onUpdate, onProfileChang
     onUpdate(p);         // update sidebar
   }
 
-  async function handleAvatar(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
-    setUploadingA(true);
-    const url = await uploadFile("avatars", `avatars/${userId}.${file.name.split(".").pop()}`, file);
-    if (url) {
-      await supabase.from("profiles").update({ avatar_url: url }).eq("id", userId);
-      const updated = { ...localProfile!, avatar_url: url };
-      updateLocal(updated);
+  async function saveImage(file: File, field: "avatar_url" | "banner_url") {
+    setProfileError(null);
+    if (file.size>5*1024*1024 || !["image/png","image/jpeg","image/webp","image/gif"].includes(file.type)) {
+      setProfileError("Выберите PNG, JPEG, WebP или GIF размером до 5 МБ."); return;
     }
-    setUploadingA(false);
+    const path=`${userId}/${field}-${crypto.randomUUID()}.${file.name.split(".").pop()}`;
+    const url=await uploadFile("avatars",path,file);
+    if (!url) { setProfileError("Не удалось загрузить изображение. Повторите попытку."); return; }
+    const { error }=await supabase.from("profiles").update(field === "avatar_url" ? { avatar_url:url } : { banner_url:url }).eq("id",userId).select("id").single();
+    if (error) { setProfileError("Не удалось сохранить изображение профиля."); return; }
+    updateLocal({ ...localProfile!,[field]:url });
   }
-
-  async function handleBanner(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]; if (!file) return;
-    setUploadingB(true);
-    const url = await uploadFile("avatars", `banners/${userId}.${file.name.split(".").pop()}`, file);
-    if (url) {
-      await supabase.from("profiles").update({ banner_url: url }).eq("id", userId);
-      updateLocal({ ...localProfile!, banner_url: url });
-    }
-    setUploadingB(false);
+  async function handleAvatar(event: React.ChangeEvent<HTMLInputElement>) {
+    const file=event.target.files?.[0]; if(!file)return;
+    setUploadingA(true); try { await saveImage(file,"avatar_url"); } finally { setUploadingA(false); }
   }
-
+  async function handleBanner(event: React.ChangeEvent<HTMLInputElement>) {
+    const file=event.target.files?.[0]; if(!file)return;
+    setUploadingB(true); try { await saveImage(file,"banner_url"); } finally { setUploadingB(false); }
+  }
   async function handleSave() {
+    setProfileError(null);
+    if (!name.trim()) { setProfileError("Введите имя в чате."); return; }
+    const handle=username.trim().toLowerCase();
+    if (handle && !/^[a-z0-9_]{3,20}$/.test(handle)) { setProfileError("Юзернейм: 3–20 символов, латиница, цифры и подчёркивание."); return; }
     setSaving(true);
-    const { data } = await supabase.from("profiles")
-      .update({ display_name: name.trim(), username: username.trim() || null, bio: bio.trim() || null, status })
-      .eq("id", userId)
-      .select("display_name, avatar_url, banner_url, bio, status, username, email")
-      .single();
-    if (data) { updateLocal(data as Profile); setSaved(true); setTimeout(() => setSaved(false), 2000); }
+    const { data,error }=await supabase.from("profiles")
+      .update({ display_name:name.trim(),...(!usernameLocked ? {username:handle||null} : {}),bio:bio.trim()||null,status })
+      .eq("id",userId).select("display_name,avatar_url,banner_url,bio,status,username").single();
+    if (error || !data) setProfileError("Не удалось сохранить профиль. Проверьте юзернейм и повторите.");
+    else { updateLocal({ ...data,email:localProfile?.email ?? null } as Profile); setSaved(true); setTimeout(()=>setSaved(false),2000); }
     setSaving(false);
   }
 
   return (
     <div>
+      {profileError && <p role="alert" className="mb-4 text-sm text-red-300">{profileError}</p>}
       {/* Banner */}
       <div
         className="relative h-32 cursor-pointer group rounded-xl overflow-hidden mb-4"
@@ -296,10 +290,12 @@ function ProfileSection({ userId, profile: initProfile, onUpdate, onProfileChang
 
         <div>
           <label className="mb-1.5 block text-xs text-white/40">Username</label>
+          {usernameLocked && <p className="mb-2 text-xs text-white/30">Этот аккаунт использует юзернейм для входа. Его изменение временно недоступно.</p>}
           <div className="flex items-center rounded-xl border border-white/10 bg-white/5 px-4">
             <span className="text-sm text-white/30">@</span>
             <input
               value={username}
+              readOnly={usernameLocked}
               onChange={e => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
               className="flex-1 bg-transparent py-2.5 pl-1 text-sm text-white outline-none placeholder:text-white/20"
               placeholder="username"
@@ -353,7 +349,7 @@ function ProfileSection({ userId, profile: initProfile, onUpdate, onProfileChang
   );
 }
 
-function NotificationsSection({ prefs, onChange }: { prefs: NoxPrefs; onChange: (k: keyof NoxPrefs, v: any) => void }) {
+function NotificationsSection({ prefs, onChange }: { prefs: NoxPrefs; onChange: <K extends keyof NoxPrefs>(k: K, v: NoxPrefs[K]) => void }) {
   async function requestNotifPermission() {
     if (!("Notification" in window)) return;
     const p = await Notification.requestPermission();
@@ -387,7 +383,7 @@ function NotificationsSection({ prefs, onChange }: { prefs: NoxPrefs; onChange: 
   );
 }
 
-function AppearanceSection({ prefs, onChange }: { prefs: NoxPrefs; onChange: (k: keyof NoxPrefs, v: any) => void }) {
+function AppearanceSection({ prefs, onChange }: { prefs: NoxPrefs; onChange: <K extends keyof NoxPrefs>(k: K, v: NoxPrefs[K]) => void }) {
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-white/5 bg-white/3 overflow-hidden divide-y divide-white/5">
@@ -424,35 +420,8 @@ function AppearanceSection({ prefs, onChange }: { prefs: NoxPrefs; onChange: (k:
   );
 }
 
-function AudioVideoSection() {
-  const [mics,     setMics]     = useState<MediaDeviceInfo[]>([]);
-  const [cams,     setCams]     = useState<MediaDeviceInfo[]>([]);
-  const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([]);
-  const [selMic,   setSelMic]   = useState("");
-  const [selCam,   setSelCam]   = useState("");
-  const [selSpk,   setSelSpk]   = useState("");
-  const [loading,  setLoading]  = useState(true);
-
-  useEffect(() => {
-    async function load() {
-      try {
-        await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(() => {});
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        setMics(devices.filter(d => d.kind === "audioinput"));
-        setCams(devices.filter(d => d.kind === "videoinput"));
-        setSpeakers(devices.filter(d => d.kind === "audiooutput"));
-        setSelMic(getPref("nox_mic", "default"));
-        setSelCam(getPref("nox_cam", "default"));
-        setSelSpk(getPref("nox_spk", "default"));
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
-
-  function DeviceSelect({ label, devices, value, prefKey, onChange }: {
-    label: string; devices: MediaDeviceInfo[]; value: string; prefKey: string; onChange: (v: string) => void;
+function DeviceSelect({ label, devices, value, prefKey, onChange, loading }: {
+    label: string; devices: MediaDeviceInfo[]; value: string; prefKey: string; loading: boolean; onChange: (v: string) => void;
   }) {
     return (
       <div className="px-4 py-3.5">
@@ -477,11 +446,39 @@ function AudioVideoSection() {
     );
   }
 
+
+function AudioVideoSection() {
+  const [mics,     setMics]     = useState<MediaDeviceInfo[]>([]);
+  const [cams,     setCams]     = useState<MediaDeviceInfo[]>([]);
+  const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([]);
+  const [selMic,   setSelMic]   = useState("");
+  const [selCam,   setSelCam]   = useState("");
+  const [selSpk,   setSelSpk]   = useState("");
+  const [loading,  setLoading]  = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setMics(devices.filter(d => d.kind === "audioinput"));
+        setCams(devices.filter(d => d.kind === "videoinput"));
+        setSpeakers(devices.filter(d => d.kind === "audiooutput"));
+        setSelMic(getPref("nox_mic", "default"));
+        setSelCam(getPref("nox_cam", "default"));
+        setSelSpk(getPref("nox_spk", "default"));
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+
   return (
     <div className="rounded-xl border border-white/5 bg-white/3 overflow-hidden divide-y divide-white/5">
-      <DeviceSelect label="Microphone" devices={mics} value={selMic} prefKey="nox_mic" onChange={setSelMic}/>
-      <DeviceSelect label="Camera"     devices={cams} value={selCam} prefKey="nox_cam" onChange={setSelCam}/>
-      <DeviceSelect label="Speakers"   devices={speakers} value={selSpk} prefKey="nox_spk" onChange={setSelSpk}/>
+      <DeviceSelect loading={loading} label="Microphone" devices={mics} value={selMic} prefKey="nox_mic" onChange={setSelMic}/>
+      <DeviceSelect loading={loading} label="Camera"     devices={cams} value={selCam} prefKey="nox_cam" onChange={setSelCam}/>
+      <DeviceSelect loading={loading} label="Speakers"   devices={speakers} value={selSpk} prefKey="nox_spk" onChange={setSelSpk}/>
     </div>
   );
 }
@@ -679,10 +676,13 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
   useEffect(() => {
     supabase
       .from("profiles")
-      .select("display_name, avatar_url, banner_url, bio, status, username, email")
+      .select("display_name, avatar_url, banner_url, bio, status, username")
       .eq("id", userId)
       .single()
-      .then(({ data }) => { if (data) setFullProfile(data as Profile); });
+      .then(async ({ data }) => {
+        const { data: auth } = await supabase.auth.getUser();
+        if (data) setFullProfile({ ...data, email:auth.user?.email ?? null } as Profile);
+      });
   }, [userId]);
 
   // Update cache when ProfileSection saves / uploads
@@ -721,7 +721,8 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
   }
 
   async function handleSignOut() {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({scope:"local"});
+    for (const key of Object.keys(sessionStorage)) if (key.startsWith(`nox-draft:${userId}:`)) sessionStorage.removeItem(key);
     window.location.href = "/login";
   }
 
@@ -843,7 +844,7 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
 
             {/* Content — keyed on activeSection so sections re-mount with correct data */}
             <div key={activeSection} className="flex-1 overflow-y-auto px-4 py-5 [&::-webkit-scrollbar]:hidden" style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 20px)" }}>
-              {activeSection === "profile" && (
+              {activeSection === "profile" && fullProfile && (
                 <ProfileSection userId={userId} profile={fullProfile} onUpdate={onUpdate} onProfileChange={handleProfileChange}/>
               )}
               {activeSection === "notifications" && (
@@ -934,7 +935,7 @@ export function SettingsModal({ userId, profile: sidebarProfile, onClose, onUpda
         {/* Scrollable content — key triggers re-animation on section switch */}
         <div key={sectionKey} className="flex-1 overflow-y-auto px-8 py-6 [&::-webkit-scrollbar]:hidden settings-section">
           <div className="max-w-lg">
-            {section === "profile" && (
+            {section === "profile" && fullProfile && (
               <ProfileSection
                 userId={userId}
                 profile={fullProfile}

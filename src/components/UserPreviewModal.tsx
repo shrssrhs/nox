@@ -53,7 +53,7 @@ interface UserPreview {
   bio?: string | null;
   email?: string | null;
   status: string | null;
-  badges?: string[];
+  badges?: string[] | null;
 }
 
 interface Props {

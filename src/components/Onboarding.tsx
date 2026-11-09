@@ -45,8 +45,8 @@ export function Onboarding({
     if (!user) { setError("Сессия истекла, войдите снова"); setBusy(false); return; }
     const { error: upErr } = await supabase
       .from("profiles")
-      .update({ display_name: name.trim(), username: uname || null })
-      .eq("id", user.id);
+      .update({ display_name: name.trim(), ...(!usernameLocked ? {username: uname || null} : {}) })
+      .eq("id", user.id).select("id").single();
     if (upErr) { setError(upErr.message); setBusy(false); return; }
 
     // 2FA is optional — only stop for a challenge if a verified factor exists
