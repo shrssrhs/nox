@@ -3,12 +3,15 @@
 import { useState, useCallback, useEffect, useRef, KeyboardEvent } from "react";
 import { useDMMessages } from "@/hooks/useDMs";
 import type { DMMessage } from "@/hooks/useDMs";
-import { createClient } from "@/lib/supabase/client";
 import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
 import { FEmoji, StatusDot, statusEmoji } from "@/components/FEmoji";
 import { useReactions } from "@/hooks/useReactions";
 import type { ReactionGroup } from "@/hooks/useReactions";
 import { useTyping } from "@/hooks/useTyping";
+import { useAttachmentUrl } from "@/hooks/useAttachmentUrl";
+import { useChatDraft } from "@/hooks/useChatDraft";
+import { uploadAttachment } from "@/lib/attachments";
+import { messageError, submissionId } from "@/lib/message-state";
 import { renderMarkdown } from "@/lib/markdown";
 
 const REPLY_RE = /^«R»(.+?)»(.+?)«end»\n?/;
@@ -57,8 +60,9 @@ function Bubble({
   const [editValue, setEditValue]     = useState(text);
   const [previewUrl, setPreviewUrl]   = useState<string | null>(null);
 
-  const isImage       = /\.(jpeg|jpg|gif|png|webp)($|\?)/i.test(text);
-  const isVideo       = /\.(mp4|webm|ogg|mov)($|\?)/i.test(text);
+  const { url: mediaUrl, error: mediaError } = useAttachmentUrl(text);
+  const isImage       = /^https?:\/\/\S+$/.test(text) && /\.(jpeg|jpg|gif|png|webp)($|\?)/i.test(text);
+  const isVideo       = /^https?:\/\/\S+$/.test(text) && /\.(mp4|webm|ogg|mov)($|\?)/i.test(text);
   const isStorageFile = text.startsWith("http") && text.includes("/storage/v1/object/public/");
   const fileExt       = getFileExt(text);
   const isCodeFile    = isStorageFile && fileExt in CODE_LANGS;
@@ -72,7 +76,7 @@ function Bubble({
   const handleCopy = async () => {
     if (isImage) {
       try {
-        const res  = await fetch(text);
+        const res  = await fetch(mediaUrl ?? text);
         const blob = await res.blob();
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
         return;
@@ -85,7 +89,7 @@ function Bubble({
 
   return (
     <div
-      onContextMenu={(e) => { e.preventDefault(); setMenuPos({ x: e.clientX, y: e.clientY }); setMenuVisible(true); }}
+      onContextMenu={(e) => { e.preventDefault(); setMenuPos({ x: Math.max(8,Math.min(e.clientX,window.innerWidth-190)), y: Math.max(8,Math.min(e.clientY,window.innerHeight-230)) }); setMenuVisible(true); }}
       className={`flex gap-3 select-none ${isOwn ? "flex-row-reverse" : ""}`}
     >
       <Avatar name={name} url={msg.profiles?.avatar_url}/>
@@ -93,7 +97,7 @@ function Bubble({
       <div className={`flex max-w-[70%] flex-col gap-1 ${isOwn ? "items-end" : ""}`}>
         <div className="flex items-baseline gap-2">
           {!isOwn && <span className="text-xs font-medium text-white/70">{name}</span>}
-          <span className="text-[11px] text-white/30">{time}</span>
+          <span className="text-[11px] text-white/30">{time}</span><button aria-label="Действия с сообщением" title="Действия с сообщением" onClick={event=>{event.stopPropagation();setMenuPos({x:Math.max(8,Math.min(event.clientX,window.innerWidth-190)),y:Math.max(8,Math.min(event.clientY,window.innerHeight-230))});setMenuVisible(true);}} className="ml-1 rounded px-1 text-white/25 hover:bg-white/10 hover:text-white">⋯</button>
         </div>
 
         {replyAuthor && (
@@ -123,20 +127,20 @@ function Bubble({
               <div className="flex justify-end gap-1.5 text-xs font-mono">
                 <button onClick={() => setIsEditing(false)} className="text-white/40 hover:text-white px-2 py-1">[cancel]</button>
                 <button
-                  onClick={async () => { if (editValue.trim()) await onEdit(msg.id, editValue.trim()); setIsEditing(false); }}
+                  onClick={async () => { try { if (editValue.trim()) await onEdit(msg.id, editValue.trim()); setIsEditing(false); } catch { /* keep the editor for retry */ } }}
                   className="text-emerald-400 hover:text-emerald-300 px-2 py-1"
                 >[save]</button>
               </div>
             </div>
-          ) : isImage ? (
+          ) : mediaError ? <p role="alert" className="p-3 text-sm text-red-300">{mediaError}</p> : isImage ? (
             <img
-              src={text} alt="Attachment"
+              src={mediaUrl ?? undefined} alt="Attachment"
               onClick={() => setPreviewUrl(text)}
               className="max-w-xs max-h-64 rounded-xl object-contain border border-white/10 bg-black/20 cursor-zoom-in"
               loading="lazy"
             />
           ) : isVideo ? (
-            <video src={text} controls className="max-w-xs max-h-64 rounded-xl border border-white/10 bg-black/20"/>
+            <video src={mediaUrl ?? undefined} controls className="max-w-xs max-h-64 rounded-xl border border-white/10 bg-black/20"/>
           ) : isCodeFile ? (
             <button
               onClick={() => setPreviewUrl(text)}
@@ -151,7 +155,7 @@ function Bubble({
               </div>
             </button>
           ) : isStorageFile ? (
-            <a href={text} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-3 rounded-xl transition-colors text-white">
+            <a href={mediaUrl ?? undefined} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-3 rounded-xl transition-colors text-white">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/60">📎</div>
               <div className="min-w-0 text-left">
                 <p className="text-xs font-medium truncate max-w-[160px] text-white/80">
@@ -229,14 +233,16 @@ function Bubble({
 }
 
 export function DMView({ conversationId, userId, userName, otherUser }: Props) {
-  const supabase = createClient();
-  const { messages, sendDM, editDM, deleteDM, loading, bottomRef } = useDMMessages(conversationId);
+  const { messages, sendDM, editDM, deleteDM, loading, bottomRef, error, hasMore, loadingOlder, loadOlder } = useDMMessages(conversationId);
   const { reactions, toggle: toggleReaction } = useReactions(messages.map((m) => m.id), userId);
-  const { typingUsers, startTyping, stopTyping } = useTyping(conversationId, userId, userName);
-  const [draft, setDraft]           = useState("");
+  const { typingUsers, startTyping, stopTyping } = useTyping(conversationId, userId, userName, "dm");
+  const [draft, setDraft] = useChatDraft(`${userId}:dm:${conversationId}`);
   const [replyingTo, setReplyingTo] = useState<DMMessage | null>(null);
   const fileInputRef                = useRef<HTMLInputElement>(null);
   const sending                     = useRef(false);
+  const pendingSend = useRef<{ content: string; id: string } | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const handleSend = useCallback(async () => {
     if (!draft.trim() || sending.current) return;
@@ -246,31 +252,35 @@ export function DMView({ conversationId, userId, userName, otherUser }: Props) {
       const author  = replyingTo.profiles?.display_name ?? "Unknown";
       const preview = replyingTo.content.replace(REPLY_RE, "").slice(0, 60).replace(/\n/g, " ");
       content = `«R»${author}»${preview}«end»\n${content}`;
-      setReplyingTo(null);
     }
-    setDraft("");
-    await sendDM(content, userId);
-    sending.current = false;
-  }, [draft, userId, sendDM, replyingTo]);
+    pendingSend.current = submissionId(pendingSend.current, content, conversationId);
+    setSendError(null);
+    try {
+      await sendDM(content, userId, pendingSend.current.id);
+      setDraft((current) => current === draft ? "" : current);
+      setReplyingTo(null);
+      pendingSend.current = null;
+      stopTyping();
+    } catch (error) { setSendError(messageError(error)); }
+    finally { sending.current = false; }
+  }, [draft, userId, sendDM, replyingTo, conversationId, setDraft, stopTyping]);
 
-  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || sending.current) return;
+  const sendFile = useCallback(async (file: File) => {
+    if (sending.current) return;
     sending.current = true;
     try {
-      const ext  = file.name.split(".").pop();
-      const path = `dm-${conversationId}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("attachments").upload(path, file);
-      if (error) throw error;
-      const { data: { publicUrl } } = supabase.storage.from("attachments").getPublicUrl(path);
-      await sendDM(publicUrl, userId);
-    } catch (err) {
-      console.error("DM upload failed:", err);
-    } finally {
-      sending.current = false;
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }, [conversationId, userId, sendDM, supabase]);
+      setSendError(null);
+      const attachment = await uploadAttachment(file,"dm",conversationId,userId);
+      await sendDM(attachment.url,userId,attachment.messageId);
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value="";
+    } catch (error) { setSendError(error instanceof Error && error.message.includes("25 MB") ? "Файл больше 25 МБ." : messageError(error)); }
+    finally { sending.current=false; }
+  }, [conversationId,userId,sendDM]);
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file=event.target.files?.[0]; if (!file || sending.current) return;
+    setPendingFile(file); void sendFile(file);
+  }, [sendFile]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -294,6 +304,7 @@ export function DMView({ conversationId, userId, userName, otherUser }: Props) {
         </div>
       </div>
 
+      {(error || sendError) && <div role="alert" className="bg-red-500/10 px-5 py-3 text-sm text-red-200">{sendError || error}{pendingFile && <button className="ml-3 underline" onClick={() => void sendFile(pendingFile)}>Повторить отправку файла</button>}</div>}
       {/* Messages */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {loading ? (
@@ -305,9 +316,11 @@ export function DMView({ conversationId, userId, userName, otherUser }: Props) {
           </div>
         ) : (
           <div className="messages-list flex flex-col">
-            {messages.map((msg) => (
+            {hasMore && <button onClick={() => void loadOlder()} disabled={loadingOlder} className="mx-auto my-3 rounded-lg bg-white/5 px-4 py-2 text-sm text-white/60">{loadingOlder ? "Загружаем…" : "Предыдущие сообщения"}</button>}
+            {messages.map((msg, index) => (
+                <div key={msg.id}>
+                  {(index === 0 || new Date(messages[index-1].created_at).toDateString() !== new Date(msg.created_at).toDateString()) && <p className="my-4 text-center text-[11px] text-white/30">{new Date(msg.created_at).toLocaleDateString([], {day:"numeric",month:"long",year:"numeric"})}</p>}
               <Bubble
-                key={msg.id}
                 msg={msg}
                 isOwn={msg.sender_id === userId}
                 onReply={setReplyingTo}
@@ -316,7 +329,8 @@ export function DMView({ conversationId, userId, userName, otherUser }: Props) {
                 reactions={reactions[msg.id] ?? []}
                 onReact={(emoji) => toggleReaction(msg.id, emoji)}
               />
-            ))}
+            </div>
+              ))}
             <div ref={bottomRef}/>
           </div>
         )}
@@ -325,7 +339,7 @@ export function DMView({ conversationId, userId, userName, otherUser }: Props) {
       {/* Input */}
       <div className="border-t border-white/10 flex-shrink-0">
         {/* Typing indicator */}
-        <div className={`overflow-hidden transition-all duration-200 ${typingUsers.length > 0 ? "max-h-6" : "max-h-0"}`}>
+        <div aria-hidden={typingUsers.length === 0} className={`overflow-hidden transition-all duration-200 ${typingUsers.length > 0 ? "max-h-6" : "max-h-0"}`}>
           <p className="px-5 pt-1.5 text-[11px] text-white/30 italic">
             {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing
             <span className="inline-flex gap-0.5 ml-1">
@@ -346,9 +360,9 @@ export function DMView({ conversationId, userId, userName, otherUser }: Props) {
           </div>
         )}
         <div className="flex items-end gap-3 p-4">
-          <input type="file" ref={fileInputRef} accept="image/*,video/*,application/*" onChange={handleFileUpload} className="hidden" />
+          <input type="file" ref={fileInputRef} accept="*/*" onChange={handleFileUpload} className="hidden" />
           <button
-            onClick={() => fileInputRef.current?.click()}
+            aria-label="Прикрепить файл" onClick={() => fileInputRef.current?.click()}
             className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -366,7 +380,7 @@ export function DMView({ conversationId, userId, userName, otherUser }: Props) {
             style={{ scrollbarWidth: "none" }}
           />
           <button
-            onClick={handleSend}
+            aria-label="Отправить сообщение" onClick={handleSend}
             disabled={!draft.trim()}
             className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/5 text-white/50 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-20"
           >

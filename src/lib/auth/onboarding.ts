@@ -10,25 +10,14 @@ export async function resolveOnboardingStep(
   supabase: SupabaseClient,
   userId: string
 ): Promise<{ step: OnboardingStep; displayName: string | null }> {
-  // 1. Profile must have a display name (row is created by the DB trigger on signup).
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name")
-    .eq("id", userId)
-    .single();
-  const displayName: string | null = profile?.display_name ?? null;
-
-  if (!displayName || !displayName.trim()) {
-    return { step: "profile", displayName };
-  }
-
-  // 2. If 2FA is enrolled, this session must be elevated to aal2.
-  //   currentLevel === 'aal2'              → fully authenticated → done
-  //   nextLevel === 'aal2', current 'aal1' → has a factor, not elevated → challenge
-  //   nextLevel === 'aal1'                 → no factor (2FA off) → done
-  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-
-  if (aal?.currentLevel === "aal2") return { step: "done", displayName };
-  if (aal?.nextLevel === "aal2") return { step: "mfa-challenge", displayName };
-  return { step: "done", displayName };
+  // Challenge before profile queries: profile RLS correctly rejects AAL1
+  // sessions when this user has a verified factor.
+  const { data: aal, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (assuranceError) throw assuranceError;
+  if (aal?.currentLevel !== "aal2" && aal?.nextLevel === "aal2") return { step: "mfa-challenge", displayName:null };
+  const { data: profile, error } = await supabase.from("profiles").select("display_name").eq("id",userId).maybeSingle();
+  if (error) throw error;
+  if (!profile) throw new Error("Profile has not been provisioned");
+  const displayName: string | null = profile.display_name;
+  return { step: displayName?.trim() ? "done" : "profile", displayName };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useAttachmentUrl } from "@/hooks/useAttachmentUrl";
 import { useEffect, useRef, useState } from "react";
 
 // ─── Language map ─────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ interface FilePreviewProps {
 }
 
 export function FilePreview({ url, onClose }: FilePreviewProps) {
+  const { url: mediaUrl, error: mediaError } = useAttachmentUrl(url);
   const ext = getFileExt(url);
   const filename = getFilename(url);
   const isImage = /^(jpeg|jpg|gif|png|webp|svg)$/.test(ext);
@@ -54,13 +56,14 @@ export function FilePreview({ url, onClose }: FilePreviewProps) {
 
   // Fetch code content
   useEffect(() => {
-    if (!isCode) return;
-    setLoadingCode(true);
-    fetch(url)
-      .then((r) => r.text())
+    if (!isCode || !mediaUrl) return;
+    const controller = new AbortController();
+    fetch(mediaUrl, { signal: controller.signal })
+      .then((r) => { if (!r.ok) throw new Error("File unavailable"); return r.text(); })
       .then((t) => { setCode(t); setLoadingCode(false); })
       .catch(() => { setCode("// Failed to load file."); setLoadingCode(false); });
-  }, [url, isCode]);
+    return () => controller.abort();
+  }, [mediaUrl, isCode]);
 
   const handleOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) onClose();
@@ -106,11 +109,12 @@ export function FilePreview({ url, onClose }: FilePreviewProps) {
         [esc]
       </button>
 
+      {mediaError && <p role="alert" className="text-red-300">{mediaError}</p>}
       {/* ── Image ── */}
       {isImage && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={url}
+          src={mediaUrl ?? undefined}
           alt={filename}
           style={{
             maxWidth: "90vw",
@@ -125,7 +129,7 @@ export function FilePreview({ url, onClose }: FilePreviewProps) {
       {/* ── Video ── */}
       {isVideo && (
         <video
-          src={url}
+          src={mediaUrl ?? undefined}
           controls
           autoPlay
           style={{

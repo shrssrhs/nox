@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 // ─── Audio engine ─────────────────────────────────────────────────────────────
 function useAudio() {
@@ -123,7 +123,8 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
   // window, so an initial value derived from it desyncs server/client HTML and
   // throws React hydration error #418 (which aborts hydration and can leave the
   // whole page's event handlers unattached). Decide visibility after mount.
-  const [ready,   setReady]   = useState(false);
+  const ready=useSyncExternalStore(()=>()=>{},()=>true,()=>false);
+  const remembered=useSyncExternalStore((listener)=>{ window.addEventListener("storage",listener); return ()=>window.removeEventListener("storage",listener); },()=>Boolean(localStorage.getItem("nox_welcome_seen")),()=>false);
   const [gone,    setGone]    = useState(false);
   const [started, setStarted] = useState(false);  // requires user tap to unlock AudioContext
   const [phase,   setPhase]   = useState(0);
@@ -147,11 +148,6 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
     setStarted(true);
   }, []);
 
-  // Decide visibility on the client only (post-hydration) to avoid SSR mismatch.
-  useEffect(() => {
-    if (localStorage.getItem("nox_welcome_seen")) setGone(true);
-    setReady(true);
-  }, []);
 
   useEffect(() => {
     if (gone || !started) return;
@@ -178,7 +174,7 @@ export function WelcomeAnimation({ onDone }: { onDone?: () => void }) {
   }, [gone, started]);
 
   // Render nothing on the server and first client paint — matches, so no mismatch.
-  if (!ready || gone) return null;
+  if (!ready || gone || remembered) return null;
 
   // ── Tap-to-begin gate (unlocks AudioContext via user gesture) ─────────────
   if (!started) {

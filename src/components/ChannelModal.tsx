@@ -27,8 +27,10 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
   const [creating, setCreating] = useState(false);
   const [newName,  setNewName]  = useState("");
   const [newDesc,  setNewDesc]  = useState("");
+  const [newPrivate, setNewPrivate] = useState(false);
   const [newMode,  setNewMode]  = useState<"open" | "owner_only">("open");
   const [tab,      setTab]      = useState<"browse" | "create">("browse");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const inputRef   = useRef<HTMLInputElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -37,6 +39,7 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
   useEffect(() => {
     async function load() {
       setLoading(true);
+      try {
       const allChannels = await fetchAllChannels(supabase);
 
       const { data: myMemberships } = await supabase
@@ -50,9 +53,10 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
         ...ch,
         is_member: myIds.has(ch.id),
       })));
-      setLoading(false);
+      } catch { setErrorMessage("Не удалось загрузить каналы. Проверьте соединение и откройте окно снова."); }
+      finally { setLoading(false); }
     }
-    load();
+    void load();
   }, [userId]);
 
   const filtered = channels.filter((ch) =>
@@ -62,12 +66,9 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
 
   async function handleJoin(ch: Channel) {
     if (!ch.is_member) {
-      const { error } = await supabase.from("channel_members").insert({
-        channel_id: ch.id,
-        user_id: userId,
-      });
+      const { error } = await supabase.rpc("join_channel", { p_channel: ch.id });
       if (error) {
-        console.error("Failed to join channel:", error.message);
+        setErrorMessage("Не удалось вступить в канал. Проверьте доступ и повторите.");
         return;
       }
     }
@@ -79,60 +80,16 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
     if (!newName.trim()) return;
     setCreating(true);
 
-    const payload = {
-      name: newName.trim().toLowerCase().replace(/\s+/g, "-"),
-      description: newDesc.trim() || null,
-      created_by: userId,
-      mode: newMode,
-    };
-
-    let { data: ch, error } = await supabase
-      .from("channels")
-      .insert(payload)
-      .select("id, name, description")
-      .single();
-
-    if (error) {
-      const { mode: _mode, ...withoutMode } = payload;
-      ({ data: ch, error } = await supabase
-        .from("channels")
-        .insert(withoutMode)
-        .select("id, name, description")
-        .single());
-    }
-
-    if (error) {
-      const { data: fallback, error: fallbackError } = await supabase
-        .from("channels")
-        .insert({ name: payload.name, created_by: userId })
-        .select("id, name")
-        .single();
-
-      if (fallbackError) {
-        console.error("Failed to create channel:", fallbackError.message);
-        alert(fallbackError.message);
-        setCreating(false);
-        return;
-      }
-
-      ch = { ...fallback, description: null };
-    }
-
-    if (ch) {
-      const { error: memberError } = await supabase.from("channel_members").insert({
-        channel_id: ch.id,
-        user_id: userId,
-      });
-      if (memberError) {
-        console.error("Failed to add channel owner:", memberError.message);
-        alert(memberError.message);
-        setCreating(false);
-        return;
-      }
-      onJoin(ch);
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase.rpc("create_channel", {
+        p_private: newPrivate, p_name: newName.trim(), p_description: newDesc.trim() || undefined, p_mode: newMode,
+      }).single();
+      if (error || !data) throw error ?? new Error("Channel not created");
+      onJoin(data as Channel);
       onClose();
-    }
-    setCreating(false);
+    } catch { setErrorMessage("Не удалось создать канал. Название сохранено — повторите попытку."); }
+    finally { setCreating(false); }
   }
 
   return (
@@ -143,6 +100,7 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
     >
       <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#111113] shadow-2xl overflow-hidden">
 
+        {errorMessage && <p role="alert" className="px-6 py-3 text-sm text-red-300">{errorMessage}</p>}
         {/* Tabs */}
         <div className="flex border-b border-white/10">
           {(["browse", "create"] as const).map((t) => (
@@ -193,7 +151,7 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
                     onClick={() => { setTab("create"); setNewName(query); }}
                     className="mt-1 text-xs text-white/40 hover:text-white/70 underline"
                   >
-                    Create "{query}"
+                    Create &quot;{query}&quot;
                   </button>
                 </div>
               ) : (
@@ -223,9 +181,9 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
         {/* CREATE */}
         {tab === "create" && (
           <div className="p-6">
-            <h3 className="text-lg font-medium text-white">Create channel node</h3>
+            <h3 className="text-lg font-medium text-white">Создать канал</h3>
             <p className="mt-1 mb-5 text-xs text-white/40">
-              Initialize a synchronous streaming point inside the ecosystem.
+              Создайте пространство для общения.
             </p>
 
             <div className="flex flex-col gap-4">
@@ -251,7 +209,7 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
                 <textarea
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
-                  placeholder="System notes or metadata guidelines"
+                  placeholder="О чём этот канал?"
                   rows={3}
                   className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-white/20"
                 />
@@ -271,9 +229,9 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
                         : "border-white/5 bg-transparent text-white/40 hover:border-white/10"
                     }`}
                   >
-                    <p className="text-xs font-semibold">Open Channel</p>
+                    <p className="text-xs font-semibold">Все участники</p>
                     <p className="mt-0.5 text-[10px] text-white/30">
-                      Every synchronized node user can type and share files.
+                      Участники могут писать и делиться файлами.
                     </p>
                   </button>
                   <button
@@ -285,28 +243,30 @@ export function ChannelModal({ userId, onClose, onJoin }: Props) {
                         : "border-white/5 bg-transparent text-white/40 hover:border-white/10"
                     }`}
                   >
-                    <p className="text-xs font-semibold">Owner Only</p>
+                    <p className="text-xs font-semibold">Только владелец</p>
                     <p className="mt-0.5 text-[10px] text-white/30">
-                      Read-only system feed for members. Only you can broadcast.
+                      Участники читают сообщения владельца.
                     </p>
                   </button>
                 </div>
               </div>
             </div>
 
+            <label className="mt-4 flex items-center gap-3 text-sm text-white/60"><input type="checkbox" checked={newPrivate} onChange={event=>setNewPrivate(event.target.checked)}/>Приватный канал</label>
+            <p className="mt-1 text-xs text-white/30">Приватный канал виден только его участникам.</p>
             <div className="mt-6 flex justify-end gap-2.5 border-t border-white/5 pt-4">
               <button
                 onClick={onClose}
                 className="rounded-xl px-4 py-2 text-xs font-medium text-white/40 transition-colors hover:text-white"
               >
-                Abort
+                Отмена
               </button>
               <button
                 onClick={handleCreate}
                 disabled={creating || !newName.trim()}
                 className="rounded-xl bg-white px-4 py-2 text-xs font-medium text-black transition-all hover:bg-white/90 disabled:opacity-30"
               >
-                {creating ? "Deploying…" : "Deploy Link"}
+                {creating ? "Deploying…" : "Создать канал"}
               </button>
             </div>
           </div>

@@ -36,7 +36,7 @@ interface CallRoomProps {
 function playJoinSound() {
   if (localStorage.getItem("nox_join_sound") === "false") return;
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const ctx = new AudioContext();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -74,6 +74,8 @@ function useParticipantInfo(
         ? JSON.parse(participant.metadata)
         : {};
       if (meta.avatar_url || meta.display_name) {
+        // Synchronize metadata received from LiveKit's participant resource.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setInfo((prev) => ({
           ...prev,
           avatar_url: meta.avatar_url ?? prev.avatar_url,
@@ -82,15 +84,16 @@ function useParticipantInfo(
       }
     } catch {}
 
+    const controller = new AbortController();
     const isUUID =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         participant.identity
       );
     if (isUUID) {
-      fetch(`/api/profile?id=${participant.identity}`)
+      fetch(`/api/profile?id=${participant.identity}`, { signal: controller.signal })
         .then((r) => r.json())
         .then((profile) => {
-          if (profile && !profile.error) {
+          if (!controller.signal.aborted && profile && !profile.error) {
             setInfo({
               avatar_url: profile.avatar_url ?? null,
               banner_url: profile.banner_url ?? null,
@@ -103,7 +106,8 @@ function useParticipantInfo(
         })
         .catch(() => {});
     }
-  }, [participant.identity, participant.metadata]);
+    return () => controller.abort();
+  }, [participant.identity, participant.metadata, participant.name]);
 
   return info;
 }
@@ -618,31 +622,36 @@ function CallLayout({
 
 // ─── CallRoom ─────────────────────────────────────────────────────────────────
 export function CallRoom({
-  roomName,
+  channelId,
   isFloating = false,
   onLeave,
   onCountChange,
 }: CallRoomProps) {
-  const [token, setToken] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<{ channelId: string; token: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const controller = new AbortController();
     async function getToken() {
       try {
         const res = await fetch("/api/livekit-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomName }),
+          body: JSON.stringify({ channelId }),
+          signal: controller.signal,
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
-        setToken(data.token);
+        if (!controller.signal.aborted) setCredentials({channelId, token: data.token});
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to get token");
+        if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Не удалось подключиться к звонку");
       }
     }
     getToken();
-  }, [roomName]);
+    return () => controller.abort();
+  }, [channelId]);
+
+  const token = credentials?.channelId === channelId ? credentials.token : null;
 
   if (error) {
     return (
@@ -671,45 +680,6 @@ export function CallRoom({
     >
       <CallLayout onLeave={onLeave} isFloating={isFloating} onCountChange={onCountChange} />
       <RoomAudioRenderer />
-    </LiveKitRoom>
-  );
-}
-
-// ─── Audio-only variant ───────────────────────────────────────────────────────
-export function AudioCall({
-  roomName,
-  onLeave,
-}: Omit<CallRoomProps, "channelId">) {
-  const [token, setToken] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/livekit-token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roomName }),
-    })
-      .then((r) => r.json())
-      .then((d) => setToken(d.token));
-  }, [roomName]);
-
-  if (!token) return null;
-
-  return (
-    <LiveKitRoom
-      token={token}
-      serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL}
-      connect={true}
-      onDisconnected={onLeave}
-    >
-      <RoomAudioRenderer />
-      <ControlBar
-        controls={{
-          microphone: true,
-          screenShare: true,
-          leave: true,
-          camera: false,
-        }}
-      />
     </LiveKitRoom>
   );
 }

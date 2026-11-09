@@ -43,7 +43,7 @@ export default function LoginPage() {
         if (err) throw err;
         if (!data.session) {
           // Should not happen once "Confirm email" is OFF in the dashboard.
-          setError("Регистрация требует подтверждения почты — отключите Confirm email в Supabase.");
+          setError("Проверьте почту и подтвердите регистрацию. Если вы входили по юзернейму, используйте почту или обратитесь в поддержку.");
           return;
         }
         window.location.href = "/";
@@ -65,7 +65,10 @@ export default function LoginPage() {
 
   async function signInGithub() {
     setLoading("github");
-    await supabase.auth.signInWithOAuth({ provider: "github", options: { redirectTo } });
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: "github", options: { redirectTo } });
+      if (error) throw error;
+    } catch { setError("Не удалось открыть вход через GitHub. Повторите попытку."); setLoading(null); }
   }
 
   return (

@@ -1,0 +1,24 @@
+# Recovery release procedure
+
+Production: `nyhrpavyvhxrjcdmzhnk`, canonical site `https://www.onirnox.lol/`. The original release was Git commit `1c4d4fadc2ebad76487407dd90c509a5de64e404`.
+
+1. Capture a consistent export of Auth, public application tables and Storage metadata. Download Storage bytes separately. Protect all copies, compare counts and file sizes/hashes, and rehearse restoring application data and applying recovery in an isolated database. A logical row export does not contain the platform's Auth configuration or encryption keys; cross-project Auth recovery requires a separate managed-platform procedure.
+2. Run lint, TypeScript, core/SQL/integration checks and a production build. Test the browser with two separate local origins/accounts, including failed-send retry, chat switching, private attachments, editing/deletion and small screens. Do not send diagnostic messages to existing contacts.
+3. Generate the compatibility phase with `node scripts/prepare-release.mjs > supabase/operations/prepare-web-release.sql` and review it against the recovery migration. Apply it to the existing project. It adds the RPCs, canonical DM pair map, history indexes and parent/date constraints needed by the new client. It does not replace the existing table/Storage policies. Keep this phase short: existing exposure is not closed until step 5.
+4. Release the checked web version through Vercel. Check its Git SHA, environment names/project mapping and Ready status. Verify that new code loads. Production must keep its existing Auth provider secrets and LiveKit credentials; development config is not a production settings manifest.
+5. Apply the full recovery migration in one transaction. Recheck original message/profile rows, counts, parent relationships and file paths, accounting for legitimate new activity. The migration aborts if history contains null parents/dates; investigate instead of discarding rows. It changes no passwords, Auth user IDs or message contents.
+6. Realtime clients now use private channels for presence **and** Postgres Changes. Disable “Allow public access” in the Realtime settings after checking those subscriptions. Disable anonymous sign-ins after the demo entry point is removed. Preserve existing email/GitHub sign-in settings and callbacks. Reload the browser after policy changes and check DM, files, reactions, pins and calls.
+7. Record both baseline and recovery versions in the Supabase migration ledger for the existing database. With an authorized database connection, use `supabase migration repair 20261109000000 20261109010000 --status applied --db-url ...` only after verifying actual installed definitions. Do not run `db push` while production lacks the baseline ledger entry: it would attempt to recreate existing tables.
+8. Record the deployed SHA, migration status, aggregate preservation checks, client error checks and any remaining limitations in the recovery report. Keep the backup private; do not upload it as a PR artifact.
+
+## Rollback
+
+Keep a compatible release available and disable a failing feature if needed. Do not switch RLS off or make DM attachments public as a rollback. Restoring data from backup is an incident procedure that must account for messages created after the snapshot.
+
+## Known boundaries
+
+- Existing login usernames use synthetic Auth email addresses. Some legacy public aliases are missing or conflict with another profile. Search supports display names as well as aliases. Recovery preserves account logins and public identities; resolving those inconsistencies needs a deliberate identity migration. Locked login accounts can still save their display name, bio, avatar and status.
+- Attachment authorization uses the actual parent UUID in the Storage path. Every attachment referenced by current messages matched a live conversation/channel in the snapshot. Preserve unrelated legacy objects for review; do not delete them as part of this release. New uploads have parent/user/UUID paths and a 25 MB limit. Avatars allow PNG/JPEG/WebP/GIF up to 5 MB.
+- Signed attachment links last five minutes. Realtime authorization is cached until a new JWT/connection or token expiry, as described in the [Supabase documentation](https://supabase.com/docs/guides/realtime/authorization). Removing membership prevents fresh reads/tokens; it does not revoke already downloaded files or instantly invalidate an issued signed URL.
+- Unread counters remain session-based. Server-side read cursors, a separate attachment lifecycle table, reaction foreign-key redesign and observability/backup scheduling remain follow-up work. They are not evidence that a production restore or a call succeeded.
+- The later desktop application will be written in Rust. Choose its UI framework after web authentication, messaging, files and deployment are stable; do not create a second independent backend or move service-role keys into the client.
