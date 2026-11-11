@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef, KeyboardEvent } from "react";
 import { useDMMessages } from "@/hooks/useDMs";
 import type { DMMessage } from "@/hooks/useDMs";
-import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
+import { FilePreview, CODE_LANGS, getFileExt, getFilename } from "@/components/FilePreview";
 import { FEmoji, StatusDot, statusEmoji } from "@/components/FEmoji";
 import { useReactions } from "@/hooks/useReactions";
 import type { ReactionGroup } from "@/hooks/useReactions";
@@ -150,7 +150,7 @@ function Bubble({
                 {fileExt.toUpperCase()}
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-medium truncate max-w-[160px] text-white/80">{fileExt} file</p>
+                <p className="text-xs font-medium truncate max-w-[160px] text-white/80">{getFilename(text)}</p>
                 <p className="text-[10px] text-white/30">{CODE_LANGS[fileExt]} · click to view</p>
               </div>
             </button>
@@ -159,7 +159,7 @@ function Bubble({
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/60">📎</div>
               <div className="min-w-0 text-left">
                 <p className="text-xs font-medium truncate max-w-[160px] text-white/80">
-                  {text.split("/").pop()?.split("-").slice(1).join("-") || "File"}
+                  {getFilename(text)}
                 </p>
                 <p className="text-[10px] text-white/30">Click to download</p>
               </div>

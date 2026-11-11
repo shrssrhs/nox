@@ -6,7 +6,7 @@ import { fetchUserChannels } from "@/lib/channels";
 import { useMessages } from "@/hooks/useMessages";
 import type { Message } from "@/hooks/useMessages";
 import { CallRoom } from "@/components/CallRoom";
-import { FilePreview, CODE_LANGS, getFileExt } from "@/components/FilePreview";
+import { FilePreview, CODE_LANGS, getFileExt, getFilename } from "@/components/FilePreview";
 import { SettingsModal } from "@/components/SettingsModal";
 import { NewConversationModal } from "@/components/NewConversationModal";
 import { DMView } from "@/components/DMView";
@@ -314,7 +314,7 @@ function MessageBubble({
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-medium truncate max-w-[180px] text-white/80">
-                  {text.split("/").pop()?.split("-").slice(0, 1).join("") + "." + fileExt || "File"}
+                  {getFilename(text)}
                 </p>
                 <p className="text-[10px] text-white/30">{CODE_LANGS[fileExt]} · click to view</p>
               </div>
