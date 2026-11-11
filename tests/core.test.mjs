@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RealtimeClient } from '@supabase/realtime-js';
 import { mergeMessages, submissionId } from '../src/lib/message-state.ts';
+import { attachmentFilename } from '../src/lib/file-name.ts';
 import { attachmentPath } from '../src/lib/attachment-path.ts';
 import { readHistoryWindow } from '../src/lib/history-window.ts';
 import { withDeadline, boundedFetch } from '../src/lib/request-budget.ts';
@@ -79,4 +80,15 @@ test('refresh reconciles more than 1000 messages within the REST row cap', async
   const refreshed=await readHistoryWindow(1250,provider);
   assert.equal(refreshed.records.length,1249);
   assert.equal(refreshed.records[0].content,'changed while offline');
+});
+
+test('attachment names retain original names for current, encoded and legacy paths', () => {
+  const root='https://project.supabase.co/storage/v1/object/public/attachments/room/user/';
+  const uuid='3d685634-0000-4000-8000-000000000001-';
+  assert.equal(attachmentFilename(root+uuid+'nox-qa-attachment.txt'),'nox-qa-attachment.txt');
+  assert.equal(attachmentFilename(root+uuid+encodeURIComponent('план-бета.txt')),'план-бета.txt');
+  assert.equal(attachmentFilename(root+'meeting-notes-final.txt'),'meeting-notes-final.txt');
+  assert.equal(attachmentFilename(root+'report.pdf-1794190712009.pdf'),'report.pdf');
+  assert.equal(attachmentFilename(root+'report-1794190712009.pdf'),'report.pdf');
+  assert.equal(attachmentFilename(root+'%ZZ.txt'),'%ZZ.txt');
 });

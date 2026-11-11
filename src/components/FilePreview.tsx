@@ -1,5 +1,6 @@
 "use client";
 
+import { attachmentFilename } from "@/lib/file-name";
 import { useAttachmentUrl } from "@/hooks/useAttachmentUrl";
 import { useEffect, useRef, useState } from "react";
 
@@ -17,14 +18,7 @@ export function getFileExt(url: string): string {
 }
 
 export function getFilename(url: string): string {
-  const raw = url.split("/").pop()?.split("?")[0] ?? "";
-  // Supabase filenames: original-randomhash-timestamp.ext — strip the random suffix
-  const ext = raw.split(".").pop() ?? "";
-  const stem = raw.slice(0, raw.lastIndexOf("."));
-  const parts = stem.split("-");
-  // Heuristic: last 2 parts are hash + timestamp, rejoin the rest
-  const name = parts.length > 2 ? parts.slice(0, -2).join("-") : parts[0];
-  return name ? `${name}.${ext}` : raw;
+  return attachmentFilename(url);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
